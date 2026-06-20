@@ -13,6 +13,7 @@ interface SessionCardProps {
   onPlayerClick: (playerId: string) => void
   onSlotHover: (slotId: string | null) => void
   hoveredSlotId: string | null
+  isHighlighted?: boolean
 }
 
 export default function SessionCard({
@@ -23,6 +24,7 @@ export default function SessionCard({
   onPlayerClick,
   onSlotHover,
   hoveredSlotId,
+  isHighlighted = false,
 }: SessionCardProps) {
   const getSlotsForSession = useScheduleStore((s) => s.getSlotsForSession)
   const getPlayerById = useScheduleStore((s) => s.getPlayerById)
@@ -47,7 +49,9 @@ export default function SessionCard({
   }
 
   return (
-    <div className="bg-board-surface rounded-xl border border-board-border overflow-hidden card-hover">
+    <div className={`bg-board-surface rounded-xl border overflow-hidden card-hover transition-all duration-300 ${
+      isHighlighted ? 'border-board-accent shadow-lg shadow-board-accent/20 scale-[1.01]' : 'border-board-border'
+    }`}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between mb-2">
           <div className="min-w-0 flex-1 pr-2">

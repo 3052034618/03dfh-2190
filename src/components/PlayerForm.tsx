@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { X, Trash2, Plus } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
-import type { Player, PlayRecord } from '@/types'
-import { SCRIPT_TYPES, TIME_SLOT_OPTIONS } from '@/types'
+import type { Player, PlayRecord, TimePreference } from '@/types'
+import { SCRIPT_TYPES, DEFAULT_TIME_PREFERENCE, TIME_PREFERENCE_LABELS } from '@/types'
 
 interface PlayerFormProps {
   player?: Player
@@ -22,7 +22,9 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
   const [canStayUp, setCanStayUp] = useState(player?.canStayUp ?? true)
   const [acceptCrossGender, setAcceptCrossGender] = useState(player?.acceptCrossGender ?? true)
   const [lateNote, setLateNote] = useState(player?.lateNote || '')
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>(player?.availableTimeSlots || [])
+  const [timePreference, setTimePreference] = useState<TimePreference>(
+    player?.timePreference || { ...DEFAULT_TIME_PREFERENCE }
+  )
 
   const [newPlayScript, setNewPlayScript] = useState('')
   const [newPlayType, setNewPlayType] = useState('')
@@ -37,6 +39,10 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
     setPreferenceTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     )
+  }
+
+  const toggleTimePref = (key: keyof TimePreference) => {
+    setTimePreference((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleAddPlayRecord = () => {
@@ -64,7 +70,7 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
         canStayUp,
         acceptCrossGender,
         lateNote,
-        availableTimeSlots,
+        timePreference,
       })
     } else {
       addPlayer({
@@ -73,7 +79,8 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
         canStayUp,
         acceptCrossGender,
         lateNote,
-        availableTimeSlots,
+        timePreference,
+        availableTimeSlots: [],
       })
     }
     onClose()
@@ -86,11 +93,11 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
     }
   }
 
-  const toggleTimeSlot = (slot: string) => {
-    setAvailableTimeSlots((prev) =>
-      prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]
-    )
-  }
+  const timeGroups: { label: string; keys: (keyof TimePreference)[] }[] = [
+    { label: '工作日', keys: ['weekdayDay', 'weekdayNight'] },
+    { label: '周末', keys: ['weekendDay', 'weekendNight'] },
+    { label: '深夜', keys: ['lateNight'] },
+  ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
@@ -189,23 +196,35 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-board-muted mb-1">可用时间段</label>
-            <div className="flex flex-wrap gap-1.5">
-              {TIME_SLOT_OPTIONS.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => toggleTimeSlot(slot)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    availableTimeSlots.includes(slot)
-                      ? 'bg-board-info text-white'
-                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
-                  }`}
-                >
-                  {slot}
-                </button>
+            <label className="block text-xs font-medium text-board-muted mb-2">可用日历偏好</label>
+            <div className="grid grid-cols-3 gap-2">
+              {timeGroups.map((group) => (
+                <div key={group.label} className="space-y-1">
+                  <div className="text-[10px] font-medium text-board-muted uppercase tracking-wide">
+                    {group.label}
+                  </div>
+                  <div className="space-y-1">
+                    {group.keys.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleTimePref(key)}
+                        className={`w-full px-2 py-1 rounded text-[11px] font-medium transition-colors text-left ${
+                          timePreference[key]
+                            ? 'bg-board-info text-white'
+                            : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                        }`}
+                      >
+                        {TIME_PREFERENCE_LABELS[key]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
+            <p className="mt-1.5 text-[10px] text-gray-400">
+              未选任何时段时视为未填写，不参与时间冲突判断
+            </p>
           </div>
 
           <div>

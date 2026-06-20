@@ -21,6 +21,8 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
   const [dmName, setDmName] = useState(session?.dmName || '')
   const [shopName, setShopName] = useState(session?.shopName || '')
   const [depositStatus, setDepositStatus] = useState<Session['depositStatus']>(session?.depositStatus || 'unpaid')
+  const [dayType, setDayType] = useState<'weekday' | 'weekend' | 'any'>(session?.sessionTime?.dayType || 'any')
+  const [timeOfDay, setTimeOfDay] = useState<'day' | 'night' | 'late' | 'any'>(session?.sessionTime?.timeOfDay || 'any')
   const [slotCount, setSlotCount] = useState(6)
   const [slotGenders, setSlotGenders] = useState<string[]>(
     Array(6).fill('any')
@@ -47,6 +49,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
         dmName,
         shopName,
         depositStatus,
+        sessionTime: { dayType, timeOfDay },
       })
     } else {
       addSession({
@@ -57,6 +60,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
         dmName,
         shopName,
         depositStatus,
+        sessionTime: { dayType, timeOfDay },
         slotCount,
         slotGenders: slotGenders.slice(0, slotCount),
       })
@@ -165,6 +169,56 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
                 placeholder="店铺名称"
                 className="w-full px-3 py-2 rounded-lg border border-board-border text-sm text-board-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-board-accent/30 focus:border-board-accent transition-colors"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-board-muted mb-1">时段类型</label>
+              <div className="flex gap-1">
+                {([
+                  { k: 'any', label: '不限' },
+                  { k: 'weekday', label: '工作日' },
+                  { k: 'weekend', label: '周末' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.k}
+                    type="button"
+                    onClick={() => setDayType(opt.k)}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      dayType === opt.k
+                        ? 'bg-board-info text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-board-muted mb-1">时段</label>
+              <div className="flex gap-1">
+                {([
+                  { k: 'any', label: '不限' },
+                  { k: 'day', label: '白天' },
+                  { k: 'night', label: '晚间' },
+                  { k: 'late', label: '深夜' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.k}
+                    type="button"
+                    onClick={() => setTimeOfDay(opt.k)}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      timeOfDay === opt.k
+                        ? 'bg-board-info text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

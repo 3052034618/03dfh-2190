@@ -12,8 +12,9 @@ import {
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session, Player, Hint, DragData } from '@/types'
 import Toolbar from '@/components/Toolbar'
-import SessionPanel from '@/components/SessionPanel'
+import SessionPanel, { type SessionFilter } from '@/components/SessionPanel'
 import PlayerPanel from '@/components/PlayerPanel'
+import ConflictPanel from '@/components/ConflictPanel'
 import PlayerCard from '@/components/PlayerCard'
 import SessionForm from '@/components/SessionForm'
 import PlayerForm from '@/components/PlayerForm'
@@ -34,6 +35,25 @@ export default function Home() {
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null)
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null)
   const [overSlotId, setOverSlotId] = useState<string | null>(null)
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>({
+    shop: null,
+    dm: null,
+    types: [],
+  })
+  const [rightTab, setRightTab] = useState<'players' | 'conflicts'>('players')
+  const [highlightSessionId, setHighlightSessionId] = useState<string | null>(null)
+
+  const sessions = useScheduleStore((s) => s.sessions)
+  const currentWeekKey = useScheduleStore((s) => s.currentWeekKey)
+  const filteredSessionIds = sessions
+    .filter((s) => s.weekKey === currentWeekKey)
+    .filter((s) => {
+      if (sessionFilter.shop && s.shopName !== sessionFilter.shop) return false
+      if (sessionFilter.dm && s.dmName !== sessionFilter.dm) return false
+      if (sessionFilter.types.length > 0 && !sessionFilter.types.some((t) => s.scriptTypes.includes(t))) return false
+      return true
+    })
+    .map((s) => s.id)
 
   const activeHintSlotId = overSlotId || hoveredSlotId
   const activeHintSessionId = activeHintSlotId
@@ -153,6 +173,24 @@ export default function Home() {
     [getPlayerById]
   )
 
+  const handleLocateSession = useCallback(
+    (sessionId: string, playerId?: string) => {
+      const el = document.getElementById(`session-${sessionId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      setHighlightSessionId(sessionId)
+      setTimeout(() => setHighlightSessionId(null), 2000)
+      if (playerId) {
+        const player = getPlayerById(playerId)
+        if (player) {
+          // 可以在这里加更多高亮逻辑
+        }
+      }
+    },
+    [getPlayerById]
+  )
+
   const activePlayer = activePlayerId ? getPlayerById(activePlayerId) : null
 
   return (
@@ -181,13 +219,54 @@ export default function Home() {
                 if (activePlayerId) setHoveredSlotId(sid)
               }}
               hoveredSlotId={activeHintSlotId}
+              filter={sessionFilter}
+              onFilterChange={setSessionFilter}
+              highlightSessionId={highlightSessionId}
             />
           </div>
-          <div className="w-[42%]">
-            <PlayerPanel
-              onAddPlayer={handleNewPlayer}
-              onEditPlayer={handleEditPlayer}
-            />
+          <div className="w-[42%] flex flex-col">
+            <div className="flex border-b border-board-border shrink-0">
+              <button
+                onClick={() => setRightTab('players')}
+                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                  rightTab === 'players'
+                    ? 'text-board-text border-b-2 border-board-accent'
+                    : 'text-board-muted hover:text-board-text'
+                }`}
+              >
+                玩家池
+              </button>
+              <button
+                onClick={() => setRightTab('conflicts')}
+                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors relative ${
+                  rightTab === 'conflicts'
+                    ? 'text-board-text border-b-2 border-board-accent'
+                    : 'text-board-muted hover:text-board-text'
+                }`}
+              >
+                冲突提醒
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {rightTab === 'players' && (
+                <PlayerPanel
+                  onAddPlayer={handleNewPlayer}
+                  onEditPlayer={handleEditPlayer}
+                />
+              )}
+              {rightTab === 'conflicts' && (
+                <ConflictPanel
+                  onLocateSession={handleLocateSession}
+                  onEditPlayer={(pid) => {
+                    const p = getPlayerById(pid)
+                    if (p) {
+                      setEditPlayer(p)
+                      setShowPlayerForm(true)
+                    }
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -224,7 +303,7 @@ export default function Home() {
         />
       )}
 
-      {showExport && <ExportModal onClose={() => setShowExport(false)} />}
+      {showExport && <ExportModal onClose={() => setShowExport(false)} filterSessionIds={filteredSessionIds} />}
     </DndContext>
   )
 }

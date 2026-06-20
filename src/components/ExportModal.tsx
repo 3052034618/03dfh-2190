@@ -5,6 +5,7 @@ import { DEPOSIT_STATUS_LABELS, GENDER_LABELS } from '@/types'
 
 interface ExportModalProps {
   onClose: () => void
+  filterSessionIds?: string[]
 }
 
 interface ExportOptions {
@@ -31,7 +32,7 @@ function toShortName(nickname: string): string {
   return nickname.slice(0, 2)
 }
 
-export default function ExportModal({ onClose }: ExportModalProps) {
+export default function ExportModal({ onClose, filterSessionIds }: ExportModalProps) {
   const sessions = useScheduleStore((s) => s.sessions)
   const sessionSlots = useScheduleStore((s) => s.sessionSlots)
   const getPlayerById = useScheduleStore((s) => s.getPlayerById)
@@ -40,7 +41,10 @@ export default function ExportModal({ onClose }: ExportModalProps) {
 
   const [opts, setOpts] = useState<ExportOptions>(DEFAULT_OPTIONS)
 
-  const weekSessions = sessions.filter((s) => s.weekKey === currentWeekKey)
+  let weekSessions = sessions.filter((s) => s.weekKey === currentWeekKey)
+  if (filterSessionIds && filterSessionIds.length > 0) {
+    weekSessions = weekSessions.filter((s) => filterSessionIds.includes(s.id))
+  }
 
   const setOpt = <K extends keyof ExportOptions>(k: K, v: ExportOptions[K]) =>
     setOpts((prev) => ({ ...prev, [k]: v }))

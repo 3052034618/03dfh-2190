@@ -2,28 +2,59 @@ import { Search, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import PlayerCard from './PlayerCard'
-import type { Player } from '@/types'
-import { SCRIPT_TYPES, TIME_SLOT_OPTIONS } from '@/types'
+import type { Player, TimePreference } from '@/types'
+import { SCRIPT_TYPES, TIME_PREFERENCE_LABELS, hasAnyTimePreference } from '@/types'
 
 interface PlayerPanelProps {
   onAddPlayer: () => void
   onEditPlayer: (player: Player) => void
 }
 
+interface TimeFilter {
+  weekdayDay: boolean
+  weekdayNight: boolean
+  weekendDay: boolean
+  weekendNight: boolean
+  lateNight: boolean
+}
+
 interface FilterState {
   search: string
   types: string[]
-  timeSlots: string[]
+  time: TimeFilter
   canStayUp: 'any' | 'yes' | 'no'
   acceptCross: 'any' | 'yes' | 'no'
+}
+
+const DEFAULT_TIME_FILTER: TimeFilter = {
+  weekdayDay: false,
+  weekdayNight: false,
+  weekendDay: false,
+  weekendNight: false,
+  lateNight: false,
 }
 
 const DEFAULT_FILTER: FilterState = {
   search: '',
   types: [],
-  timeSlots: [],
+  time: { ...DEFAULT_TIME_FILTER },
   canStayUp: 'any',
   acceptCross: 'any',
+}
+
+function hasTimeFilter(tf: TimeFilter): boolean {
+  return tf.weekdayDay || tf.weekdayNight || tf.weekendDay || tf.weekendNight || tf.lateNight
+}
+
+function matchesTimeFilter(pref: TimePreference, filter: TimeFilter): boolean {
+  if (!hasTimeFilter(filter)) return true
+  if (!hasAnyTimePreference(pref)) return true
+  if (filter.weekdayDay && pref.weekdayDay) return true
+  if (filter.weekdayNight && pref.weekdayNight) return true
+  if (filter.weekendDay && pref.weekendDay) return true
+  if (filter.weekendNight && pref.weekendNight) return true
+  if (filter.lateNight && pref.lateNight) return true
+  return false
 }
 
 export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelProps) {
@@ -31,9 +62,12 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
   const getPlayerAssignedSlot = useScheduleStore((s) => s.getPlayerAssignedSlot)
   const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER)
 
+  const activeTypeCount = filter.types.length
+  const hasTime = hasTimeFilter(filter.time)
+
   const isAnyActive =
-    filter.types.length > 0 ||
-    filter.timeSlots.length > 0 ||
+    activeTypeCount > 0 ||
+    hasTime ||
     filter.canStayUp !== 'any' ||
     filter.acceptCross !== 'any' ||
     filter.search !== ''
@@ -44,17 +78,15 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
       types: f.types.includes(t) ? f.types.filter((x) => x !== t) : [...f.types, t],
     }))
   }
-  const toggleTimeSlot = (t: string) => {
-    setFilter((f) => ({
-      ...f,
-      timeSlots: f.timeSlots.includes(t) ? f.timeSlots.filter((x) => x !== t) : [...f.timeSlots, t],
-    }))
+
+  const toggleTime = (key: keyof TimeFilter) => {
+    setFilter((f) => ({ ...f, time: { ...f.time, [key]: !f.time[key] } }))
   }
 
   const filtered = players.filter((p) => {
     if (filter.search && !p.nickname.toLowerCase().includes(filter.search.toLowerCase())) return false
     if (filter.types.length > 0 && !filter.types.some((t) => p.preferenceTypes.includes(t))) return false
-    if (filter.timeSlots.length > 0 && !filter.timeSlots.some((t) => p.availableTimeSlots.includes(t))) return false
+    if (!matchesTimeFilter(p.timePreference, filter.time)) return false
     if (filter.canStayUp !== 'any' && (filter.canStayUp === 'yes') !== p.canStayUp) return false
     if (filter.acceptCross !== 'any' && (filter.acceptCross === 'yes') !== p.acceptCrossGender) return false
     return true
@@ -69,6 +101,8 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
 
   const available = filtered.filter((p) => !assignedIds.has(p.id))
   const assigned = filtered.filter((p) => assignedIds.has(p.id))
+
+  const timeKeys: (keyof TimePreference)[] = ['weekdayDay', 'weekdayNight', 'weekendDay', 'weekendNight', 'lateNight']
 
   return (
     <div className="flex flex-col h-full">
@@ -109,8 +143,8 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-medium text-board-muted uppercase">偏好类型</span>
-              {filter.types.length > 0 && (
-                <span className="text-[10px] text-board-accent">{filter.types.length}项</span>
+              {activeTypeCount > 0 && (
+                <span className="text-[10px] text-board-accent">{activeTypeCount}项</span>
               )}
             </div>
             <div className="flex flex-wrap gap-1">
@@ -133,25 +167,26 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-medium text-board-muted uppercase">可用时间</span>
-              {filter.timeSlots.length > 0 && (
-                <span className="text-[10px] text-board-accent">{filter.timeSlots.length}项</span>
+              {hasTime && (
+                <span className="text-[10px] text-board-info">已筛选</span>
               )}
             </div>
-            <div className="flex flex-wrap gap-1">
-              {TIME_SLOT_OPTIONS.map((t) => (
+            <div className="grid grid-cols-2 gap-1">
+              {timeKeys.map((k) => (
                 <button
-                  key={t}
-                  onClick={() => toggleTimeSlot(t)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                    filter.timeSlots.includes(t)
+                  key={k}
+                  onClick={() => toggleTime(k)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors text-left ${
+                    filter.time[k]
                       ? 'bg-board-info text-white'
                       : 'bg-gray-100 text-board-muted hover:bg-gray-200'
                   }`}
                 >
-                  {t}
+                  {TIME_PREFERENCE_LABELS[k]}
                 </button>
               ))}
             </div>
+            <p className="mt-0.5 text-[9px] text-gray-400">未填时间偏好的玩家默认全部显示</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
