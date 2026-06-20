@@ -1,6 +1,7 @@
 export interface Session {
   id: string
   scriptName: string
+  scriptTypes: string[]
   playerStructure: string
   estimatedDuration: number
   dmName: string
@@ -47,6 +48,10 @@ export type DragData = {
   type: 'player'
   playerId: string
 }
+
+export const TIME_SLOT_OPTIONS = [
+  '工作日白天', '工作日晚间', '周末白天', '周末晚间', '可熬夜场',
+] as const
 
 export const SCRIPT_TYPES = [
   '情感',

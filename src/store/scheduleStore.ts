@@ -28,6 +28,7 @@ function createSeedData() {
     {
       id: 's1',
       scriptName: '病娇男孩的精分日记',
+      scriptTypes: ['恐怖', '硬核'],
       playerStructure: '3男3女',
       estimatedDuration: 5,
       dmName: '阿文',
@@ -38,9 +39,10 @@ function createSeedData() {
     },
     {
       id: 's2',
-      scriptName: '年轮',
+      scriptName: '孤城',
+      scriptTypes: ['机制', '阵营'],
       playerStructure: '4男2女',
-      estimatedDuration: 4,
+      estimatedDuration: 6,
       dmName: '小何',
       shopName: '入戏推理馆',
       depositStatus: 'partial',
@@ -96,7 +98,7 @@ interface ScheduleStore {
   addPlayRecord: (record: Omit<PlayRecord, 'id'>) => void
   deletePlayRecord: (id: string) => void
 
-  getHints: (playerId: string, sessionId: string) => Hint[]
+  getHints: (playerId: string, sessionId: string, excludeSlotId?: string) => Hint[]
   getPlayerById: (id: string) => Player | undefined
   getSessionById: (id: string) => Session | undefined
   getSlotsForSession: (sessionId: string) => SessionSlot[]
@@ -117,6 +119,7 @@ export const useScheduleStore = create<ScheduleStore>()(
         const session: Session = {
           id,
           scriptName: data.scriptName,
+          scriptTypes: data.scriptTypes || [],
           playerStructure: data.playerStructure,
           estimatedDuration: data.estimatedDuration,
           dmName: data.dmName,
@@ -213,22 +216,25 @@ export const useScheduleStore = create<ScheduleStore>()(
         }))
       },
 
-      getHints: (playerId, sessionId) => {
+      getHints: (playerId, sessionId, excludeSlotId) => {
         const state = get()
         const player = state.players.find((p) => p.id === playerId)
         const session = state.sessions.find((s) => s.id === sessionId)
         if (!player || !session) return []
 
         const hints: Hint[] = []
+        const sessionTypes = session.scriptTypes || []
 
         const recentPlays = state.playRecords.filter(
           (r) =>
             r.playerId === playerId &&
             Date.now() - r.playedAt < 7 * 24 * 60 * 60 * 1000
         )
-        const sameShopSameType = recentPlays.find(
-          (r) => r.shopName === session.shopName && r.scriptType && player.preferenceTypes.includes(r.scriptType)
-        )
+        const sameShopSameType = recentPlays.find((r) => {
+          if (r.shopName !== session.shopName) return false
+          if (!r.scriptType) return false
+          return sessionTypes.includes(r.scriptType)
+        })
         if (sameShopSameType) {
           hints.push({
             type: 'info',
@@ -237,45 +243,53 @@ export const useScheduleStore = create<ScheduleStore>()(
         }
 
         const slots = state.sessionSlots.filter((s) => s.sessionId === sessionId)
-        const assignedPlayerIds = slots.filter((s) => s.playerId).map((s) => s.playerId!)
-        const assignedPlayers = assignedPlayerIds.map((pid) => state.players.find((p) => p.id === pid)).filter(Boolean) as Player[]
-        const filledCount = assignedPlayers.length
-        const totalCount = slots.length
+        const assignedSlots = slots.filter((s) => s.playerId && s.id !== excludeSlotId)
+        const assignedPlayerIds = assignedSlots.map((s) => s.playerId!)
+        const assignedPlayers = assignedPlayerIds
+          .map((pid) => state.players.find((p) => p.id === pid))
+          .filter(Boolean) as Player[]
 
-        if (filledCount < totalCount) {
-          const emptySlots = slots.filter((s) => !s.playerId)
-          const needsMechanic = emptySlots.some((s) => s.slotLabel.includes('机制'))
-          const assignedTypes = assignedPlayers.flatMap((p) => p.preferenceTypes)
-          const hasMechanic = assignedTypes.includes('机制')
-          if (!hasMechanic && session.scriptName.includes('机制')) {
-            hints.push({
-              type: 'suggestion',
-              message: `当前缺一名能吃机制的玩家`,
-            })
+        if (sessionTypes.length > 0) {
+          for (const t of sessionTypes) {
+            const currentCount = assignedPlayers.filter((p) => p.preferenceTypes.includes(t)).length
+            if (t === '机制' && currentCount === 0 && !player.preferenceTypes.includes('机制')) {
+              hints.push({
+                type: 'suggestion',
+                message: '当前车局还缺一名能吃机制的玩家',
+              })
+              break
+            }
           }
         }
 
+        if (sessionTypes.length > 0 && !player.preferenceTypes.some((pt) => sessionTypes.includes(pt))) {
+          hints.push({
+            type: 'info',
+            message: `该玩家偏好类型与本车（${sessionTypes.join('/')}）不太匹配`,
+          })
+        }
+
         if (player.availableTimeSlots.length > 0) {
-          const otherAssigned = state.sessionSlots.filter(
-            (s) => s.playerId && s.playerId !== playerId && s.sessionId !== sessionId
-          )
-          for (const os of otherAssigned) {
-            const otherSession = state.sessions.find((s) => s.id === os.sessionId)
-            if (otherSession) {
-              const otherPlayer = state.players.find((p) => p.id === os.playerId)
-              if (otherPlayer && otherPlayer.availableTimeSlots.length > 0) {
-                const overlap = player.availableTimeSlots.some((t) =>
-                  otherPlayer.availableTimeSlots.includes(t)
-                )
-                if (!overlap) {
-                  hints.push({
-                    type: 'conflict',
-                    message: `与${otherPlayer.nickname}时间不重合`,
-                  })
-                }
-              }
+          for (const otherPlayer of assignedPlayers) {
+            if (otherPlayer.id === playerId) continue
+            if (otherPlayer.availableTimeSlots.length === 0) continue
+            const overlap = player.availableTimeSlots.some((t) =>
+              otherPlayer.availableTimeSlots.includes(t)
+            )
+            if (!overlap) {
+              hints.push({
+                type: 'conflict',
+                message: `与本车${otherPlayer.nickname}时间不重合`,
+              })
             }
           }
+        }
+
+        if (session.estimatedDuration >= 6 && !player.canStayUp) {
+          hints.push({
+            type: 'conflict',
+            message: `本车预计${session.estimatedDuration}h，该玩家不能熬夜`,
+          })
         }
 
         const weekKey = state.currentWeekKey
@@ -292,19 +306,22 @@ export const useScheduleStore = create<ScheduleStore>()(
           }
         }
 
-        const targetSlot = slots.find((s) => !s.playerId)
-        if (targetSlot && targetSlot.requiredGender !== 'any') {
-          if (targetSlot.requiredGender === 'male' && player.preferenceTypes.includes('只玩女角')) {
+        const targetSlots = slots.filter((s) => !s.playerId || s.id === excludeSlotId)
+        for (const ts of targetSlots) {
+          if (ts.requiredGender === 'any') continue
+          if (ts.requiredGender === 'male' && !player.acceptCrossGender && player.preferenceTypes.includes('只玩女角')) {
             hints.push({
               type: 'suggestion',
-              message: `该位置需要男性角色，但玩家偏好女角`,
+              message: `该车位需要男性，但该玩家不接受反串/偏好女角`,
             })
+            break
           }
-          if (targetSlot.requiredGender === 'female' && player.preferenceTypes.includes('只玩男角')) {
+          if (ts.requiredGender === 'female' && !player.acceptCrossGender && player.preferenceTypes.includes('只玩男角')) {
             hints.push({
               type: 'suggestion',
-              message: `该位置需要女性角色，但玩家偏好男角`,
+              message: `该车位需要女性，但该玩家不接受反串/偏好男角`,
             })
+            break
           }
         }
 

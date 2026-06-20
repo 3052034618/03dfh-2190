@@ -1,5 +1,14 @@
-import { useState, useCallback } from 'react'
-import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { useState, useCallback, useEffect } from 'react'
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session, Player, Hint, DragData } from '@/types'
 import Toolbar from '@/components/Toolbar'
@@ -15,6 +24,7 @@ export default function Home() {
   const removePlayerFromSlot = useScheduleStore((s) => s.removePlayerFromSlot)
   const getHints = useScheduleStore((s) => s.getHints)
   const getPlayerById = useScheduleStore((s) => s.getPlayerById)
+  const sessionSlots = useScheduleStore((s) => s.sessionSlots)
 
   const [showSessionForm, setShowSessionForm] = useState(false)
   const [showPlayerForm, setShowPlayerForm] = useState(false)
@@ -22,7 +32,31 @@ export default function Home() {
   const [editPlayer, setEditPlayer] = useState<Player | undefined>()
   const [showExport, setShowExport] = useState(false)
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null)
-  const [sessionHints, setSessionHints] = useState<Record<string, Hint[]>>({})
+  const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null)
+  const [overSlotId, setOverSlotId] = useState<string | null>(null)
+
+  const activeHintSlotId = overSlotId || hoveredSlotId
+  const activeHintSessionId = activeHintSlotId
+    ? sessionSlots.find((s) => s.id === activeHintSlotId)?.sessionId
+    : null
+
+  const sessionHints: Record<string, Hint[]> = {}
+  if (activeHintSlotId && activePlayerId && activeHintSessionId) {
+    sessionHints[activeHintSessionId] = getHints(activePlayerId, activeHintSessionId, activeHintSlotId)
+  }
+
+  useEffect(() => {
+    if (!activeHintSlotId) return
+    const t = setTimeout(() => {
+      if (hoveredSlotId === activeHintSlotId) {
+        setHoveredSlotId(null)
+      }
+      if (overSlotId === activeHintSlotId) {
+        setOverSlotId(null)
+      }
+    }, 3500)
+    return () => clearTimeout(t)
+  }, [activeHintSlotId, hoveredSlotId, overSlotId])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -37,12 +71,30 @@ export default function Home() {
     }
   }, [])
 
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { over, active } = event
+      const dragData = active.data.current as DragData | undefined
+      if (!dragData || dragData.type !== 'player') return
+      if (over && over.id.toString().startsWith('slot-')) {
+        const slotId = over.id.toString().replace('slot-', '')
+        setOverSlotId(slotId)
+      } else {
+        setOverSlotId(null)
+      }
+    },
+    []
+  )
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
-      setActivePlayerId(null)
 
-      if (!over) return
+      if (!over) {
+        setActivePlayerId(null)
+        setOverSlotId(null)
+        return
+      }
 
       const dragData = active.data.current as DragData | undefined
       const dropData = over.data.current as { type: string; slotId: string } | undefined
@@ -54,18 +106,13 @@ export default function Home() {
         const slot = useScheduleStore.getState().sessionSlots.find((s) => s.id === slotId)
         if (slot && !slot.playerId) {
           assignPlayer(slotId, playerId)
-
-          const hints = getHints(playerId, slot.sessionId)
-          if (hints.length > 0) {
-            setSessionHints((prev) => ({
-              ...prev,
-              [slot.sessionId]: hints,
-            }))
-          }
         }
       }
+
+      setActivePlayerId(null)
+      setTimeout(() => setOverSlotId(null), 1500)
     },
-    [assignPlayer, getHints]
+    [assignPlayer]
   )
 
   const handleRemovePlayer = useCallback(
@@ -112,6 +159,7 @@ export default function Home() {
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="h-screen flex flex-col bg-board-bg">
@@ -129,6 +177,10 @@ export default function Home() {
               sessionHints={sessionHints}
               onRemovePlayer={handleRemovePlayer}
               onPlayerClick={handlePlayerClick}
+              onSlotHover={(sid) => {
+                if (activePlayerId) setHoveredSlotId(sid)
+              }}
+              hoveredSlotId={activeHintSlotId}
             />
           </div>
           <div className="w-[42%]">

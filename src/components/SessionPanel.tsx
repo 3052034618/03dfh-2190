@@ -9,6 +9,8 @@ interface SessionPanelProps {
   sessionHints: Record<string, Hint[]>
   onRemovePlayer: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
+  onSlotHover: (slotId: string | null) => void
+  hoveredSlotId: string | null
 }
 
 export default function SessionPanel({
@@ -17,10 +19,18 @@ export default function SessionPanel({
   sessionHints,
   onRemovePlayer,
   onPlayerClick,
+  onSlotHover,
+  hoveredSlotId,
 }: SessionPanelProps) {
   const sessions = useScheduleStore((s) => s.sessions)
   const currentWeekKey = useScheduleStore((s) => s.currentWeekKey)
   const weekSessions = sessions.filter((s) => s.weekKey === currentWeekKey)
+
+  const hoveredSessionId = hoveredSlotId
+    ? weekSessions.find((ses) =>
+        useScheduleStore.getState().sessionSlots.find((sl) => sl.id === hoveredSlotId)?.sessionId === ses.id
+      )?.id
+    : null
 
   return (
     <div className="flex flex-col h-full">
@@ -46,6 +56,8 @@ export default function SessionPanel({
             hints={sessionHints[session.id] || []}
             onRemovePlayer={onRemovePlayer}
             onPlayerClick={onPlayerClick}
+            onSlotHover={onSlotHover}
+            hoveredSlotId={hoveredSessionId === session.id ? hoveredSlotId : null}
           />
         ))}
 

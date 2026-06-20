@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { useDroppable } from '@dnd-kit/core'
 import { Pencil, Trash2, Clock, MapPin, User, Users, CreditCard } from 'lucide-react'
+import { useDroppable } from '@dnd-kit/core'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session, Hint } from '@/types'
 import { DEPOSIT_STATUS_LABELS, GENDER_LABELS } from '@/types'
@@ -12,25 +11,22 @@ interface SessionCardProps {
   hints: Hint[]
   onRemovePlayer: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
+  onSlotHover: (slotId: string | null) => void
+  hoveredSlotId: string | null
 }
 
-export default function SessionCard({ session, onEdit, hints, onRemovePlayer, onPlayerClick }: SessionCardProps) {
+export default function SessionCard({
+  session,
+  onEdit,
+  hints,
+  onRemovePlayer,
+  onPlayerClick,
+  onSlotHover,
+  hoveredSlotId,
+}: SessionCardProps) {
   const getSlotsForSession = useScheduleStore((s) => s.getSlotsForSession)
   const getPlayerById = useScheduleStore((s) => s.getPlayerById)
   const slots = getSlotsForSession(session.id)
-  const [visibleHints, setVisibleHints] = useState<Hint[]>([])
-  const hintTimerRef = useRef<ReturnType<typeof setTimeout>>()
-
-  useEffect(() => {
-    if (hints.length > 0) {
-      setVisibleHints(hints)
-      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-      hintTimerRef.current = setTimeout(() => setVisibleHints([]), 3000)
-    }
-    return () => {
-      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-    }
-  }, [hints])
 
   const depositColor: Record<string, string> = {
     paid: 'bg-board-success text-white',
@@ -38,11 +34,37 @@ export default function SessionCard({ session, onEdit, hints, onRemovePlayer, on
     partial: 'bg-board-accent text-white',
   }
 
+  const typeColor: Record<string, string> = {
+    '情感': 'bg-pink-100 text-pink-700',
+    '硬核': 'bg-purple-100 text-purple-700',
+    '机制': 'bg-amber-100 text-amber-700',
+    '恐怖': 'bg-gray-800 text-gray-100',
+    '欢乐': 'bg-yellow-100 text-yellow-700',
+    '阵营': 'bg-red-100 text-red-700',
+    '推理': 'bg-blue-100 text-blue-700',
+    '沉浸': 'bg-teal-100 text-teal-700',
+    '其他': 'bg-gray-100 text-gray-600',
+  }
+
   return (
     <div className="bg-board-surface rounded-xl border border-board-border overflow-hidden card-hover">
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between mb-2">
-          <h3 className="text-sm font-semibold text-board-text leading-tight pr-2">{session.scriptName}</h3>
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="text-sm font-semibold text-board-text leading-tight truncate">{session.scriptName}</h3>
+            {session.scriptTypes && session.scriptTypes.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {session.scriptTypes.map((t) => (
+                  <span
+                    key={t}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeColor[t] || typeColor['其他']}`}
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); onEdit() }}
@@ -80,6 +102,7 @@ export default function SessionCard({ session, onEdit, hints, onRemovePlayer, on
 
         <div className="flex items-center gap-2 mt-1.5">
           <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${depositColor[session.depositStatus]}`}>
+            <CreditCard className="w-2.5 h-2.5 inline mr-1 -mt-0.5" />
             {DEPOSIT_STATUS_LABELS[session.depositStatus]}
           </span>
         </div>
@@ -88,19 +111,29 @@ export default function SessionCard({ session, onEdit, hints, onRemovePlayer, on
       <div className="px-4 pb-3 space-y-1.5">
         {slots.map((slot) => {
           const player = slot.playerId ? getPlayerById(slot.playerId) : null
-          return <SlotItem key={slot.id} slot={slot} player={player} onRemove={onRemovePlayer} onPlayerClick={onPlayerClick} />
+          return (
+            <SlotItem
+              key={slot.id}
+              slot={slot}
+              player={player}
+              onRemove={onRemovePlayer}
+              onPlayerClick={onPlayerClick}
+              onHover={onSlotHover}
+              isHovered={hoveredSlotId === slot.id}
+            />
+          )
         })}
       </div>
 
-      {visibleHints.length > 0 && (
+      {hints.length > 0 && (
         <div className="px-4 pb-3 space-y-1">
-          {visibleHints.map((hint, i) => (
+          {hints.map((hint, i) => (
             <div
               key={i}
               className={`hint-toast flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] ${getHintColor(hint.type)}`}
             >
-              <span className="shrink-0">{getHintIcon(hint.type)}</span>
-              <span>{hint.message}</span>
+              <span className="shrink-0 leading-4">{getHintIcon(hint.type)}</span>
+              <span className="leading-4">{hint.message}</span>
             </div>
           ))}
         </div>
@@ -109,11 +142,13 @@ export default function SessionCard({ session, onEdit, hints, onRemovePlayer, on
   )
 }
 
-function SlotItem({ slot, player, onRemove, onPlayerClick }: {
+function SlotItem({ slot, player, onRemove, onPlayerClick, onHover, isHovered }: {
   slot: { id: string; slotLabel: string; requiredGender: string; playerId: string | null }
-  player: { id: string; nickname: string; preferenceTypes: string[]; canStayUp: boolean; acceptCrossGender: boolean; lateNote: string; availableTimeSlots: string[] } | undefined
+  player: { id: string; nickname: string } | undefined
   onRemove: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
+  onHover: (slotId: string | null) => void
+  isHovered: boolean
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: `slot-${slot.id}`,
@@ -124,11 +159,13 @@ function SlotItem({ slot, player, onRemove, onPlayerClick }: {
   return (
     <div
       ref={setNodeRef}
+      onMouseEnter={() => !slot.playerId && onHover(slot.id)}
+      onMouseLeave={() => onHover(null)}
       className={`
-        flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors
+        flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all
         ${slot.playerId
           ? 'bg-gray-50 border border-board-border'
-          : isOver
+          : isOver || isHovered
           ? 'slot-drop-active'
           : 'border border-dashed border-gray-200 bg-gray-50/50'
         }

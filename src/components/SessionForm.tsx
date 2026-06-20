@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session } from '@/types'
+import { SCRIPT_TYPES } from '@/types'
 
 interface SessionFormProps {
   session?: Session
@@ -14,6 +15,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
   const deleteSession = useScheduleStore((s) => s.deleteSession)
 
   const [scriptName, setScriptName] = useState(session?.scriptName || '')
+  const [scriptTypes, setScriptTypes] = useState<string[]>(session?.scriptTypes || [])
   const [playerStructure, setPlayerStructure] = useState(session?.playerStructure || '')
   const [estimatedDuration, setEstimatedDuration] = useState(session?.estimatedDuration || 4)
   const [dmName, setDmName] = useState(session?.dmName || '')
@@ -26,6 +28,12 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
 
   const isEdit = !!session
 
+  const toggleType = (t: string) => {
+    setScriptTypes((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+    )
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!scriptName.trim()) return
@@ -33,6 +41,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
     if (isEdit) {
       updateSession(session.id, {
         scriptName,
+        scriptTypes,
         playerStructure,
         estimatedDuration,
         dmName,
@@ -42,6 +51,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
     } else {
       addSession({
         scriptName,
+        scriptTypes,
         playerStructure,
         estimatedDuration,
         dmName,
@@ -70,10 +80,10 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-board-surface rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+        className="bg-board-surface rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[88vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-board-border">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-board-border sticky top-0 bg-board-surface z-10">
           <h2 className="text-base font-semibold text-board-text">
             {isEdit ? '编辑车局' : '新建车局'}
           </h2>
@@ -92,6 +102,26 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
               className="w-full px-3 py-2 rounded-lg border border-board-border text-sm text-board-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-board-accent/30 focus:border-board-accent transition-colors"
               autoFocus
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-board-muted mb-1.5">本类型标签（用于智能匹配）</label>
+            <div className="flex flex-wrap gap-1.5">
+              {SCRIPT_TYPES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleType(t)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    scriptTypes.includes(t)
+                      ? 'bg-board-text text-white'
+                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

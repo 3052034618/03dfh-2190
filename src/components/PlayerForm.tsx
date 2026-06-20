@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { X, Trash2, Plus } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Player, PlayRecord } from '@/types'
-import { SCRIPT_TYPES } from '@/types'
+import { SCRIPT_TYPES, TIME_SLOT_OPTIONS } from '@/types'
 
 interface PlayerFormProps {
   player?: Player
@@ -85,10 +85,6 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
       onClose()
     }
   }
-
-  const TIME_OPTIONS = [
-    '工作日白天', '工作日晚间', '周末白天', '周末晚间', '可熬夜场',
-  ]
 
   const toggleTimeSlot = (slot: string) => {
     setAvailableTimeSlots((prev) =>
@@ -195,7 +191,7 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
           <div>
             <label className="block text-xs font-medium text-board-muted mb-1">可用时间段</label>
             <div className="flex flex-wrap gap-1.5">
-              {TIME_OPTIONS.map((slot) => (
+              {TIME_SLOT_OPTIONS.map((slot) => (
                 <button
                   key={slot}
                   type="button"

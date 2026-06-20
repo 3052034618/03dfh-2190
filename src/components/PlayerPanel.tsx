@@ -1,24 +1,63 @@
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import PlayerCard from './PlayerCard'
 import type { Player } from '@/types'
+import { SCRIPT_TYPES, TIME_SLOT_OPTIONS } from '@/types'
 
 interface PlayerPanelProps {
   onAddPlayer: () => void
   onEditPlayer: (player: Player) => void
 }
 
+interface FilterState {
+  search: string
+  types: string[]
+  timeSlots: string[]
+  canStayUp: 'any' | 'yes' | 'no'
+  acceptCross: 'any' | 'yes' | 'no'
+}
+
+const DEFAULT_FILTER: FilterState = {
+  search: '',
+  types: [],
+  timeSlots: [],
+  canStayUp: 'any',
+  acceptCross: 'any',
+}
+
 export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelProps) {
   const players = useScheduleStore((s) => s.players)
   const getPlayerAssignedSlot = useScheduleStore((s) => s.getPlayerAssignedSlot)
-  const [search, setSearch] = useState('')
-  const [filterType, setFilterType] = useState<string>('')
+  const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER)
+
+  const isAnyActive =
+    filter.types.length > 0 ||
+    filter.timeSlots.length > 0 ||
+    filter.canStayUp !== 'any' ||
+    filter.acceptCross !== 'any' ||
+    filter.search !== ''
+
+  const toggleType = (t: string) => {
+    setFilter((f) => ({
+      ...f,
+      types: f.types.includes(t) ? f.types.filter((x) => x !== t) : [...f.types, t],
+    }))
+  }
+  const toggleTimeSlot = (t: string) => {
+    setFilter((f) => ({
+      ...f,
+      timeSlots: f.timeSlots.includes(t) ? f.timeSlots.filter((x) => x !== t) : [...f.timeSlots, t],
+    }))
+  }
 
   const filtered = players.filter((p) => {
-    const matchSearch = !search || p.nickname.toLowerCase().includes(search.toLowerCase())
-    const matchType = !filterType || p.preferenceTypes.includes(filterType)
-    return matchSearch && matchType
+    if (filter.search && !p.nickname.toLowerCase().includes(filter.search.toLowerCase())) return false
+    if (filter.types.length > 0 && !filter.types.some((t) => p.preferenceTypes.includes(t))) return false
+    if (filter.timeSlots.length > 0 && !filter.timeSlots.some((t) => p.availableTimeSlots.includes(t))) return false
+    if (filter.canStayUp !== 'any' && (filter.canStayUp === 'yes') !== p.canStayUp) return false
+    if (filter.acceptCross !== 'any' && (filter.acceptCross === 'yes') !== p.acceptCrossGender) return false
+    return true
   })
 
   const assignedIds = new Set(
@@ -36,37 +75,131 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
       <div className="px-4 py-3 border-b border-board-border shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xs font-semibold text-board-text uppercase tracking-wider">玩家池</h2>
-          <button
-            onClick={onAddPlayer}
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-board-muted hover:text-board-text hover:bg-gray-100 transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            添加
-          </button>
+          <div className="flex items-center gap-1">
+            {isAnyActive && (
+              <button
+                onClick={() => setFilter(DEFAULT_FILTER)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-board-danger hover:bg-rose-50 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                重置
+              </button>
+            )}
+            <button
+              onClick={onAddPlayer}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-board-muted hover:text-board-text hover:bg-gray-100 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              添加
+            </button>
+          </div>
         </div>
-        <div className="relative">
+
+        <div className="relative mb-2">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={filter.search}
+            onChange={(e) => setFilter({ ...filter, search: e.target.value })}
             placeholder="搜索玩家..."
             className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-board-border text-xs text-board-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-board-accent/20 focus:border-board-accent transition-colors"
           />
         </div>
-        <div className="flex flex-wrap gap-1 mt-2">
-          {['', '情感', '硬核', '机制', '恐怖', '欢乐', '阵营', '推理'].map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                filterType === type
-                  ? 'bg-board-text text-white'
-                  : 'bg-gray-100 text-board-muted hover:bg-gray-200'
-              }`}
-            >
-              {type || '全部'}
-            </button>
-          ))}
+
+        <div className="space-y-2">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-board-muted uppercase">偏好类型</span>
+              {filter.types.length > 0 && (
+                <span className="text-[10px] text-board-accent">{filter.types.length}项</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {SCRIPT_TYPES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => toggleType(t)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    filter.types.includes(t)
+                      ? 'bg-board-text text-white'
+                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-board-muted uppercase">可用时间</span>
+              {filter.timeSlots.length > 0 && (
+                <span className="text-[10px] text-board-accent">{filter.timeSlots.length}项</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {TIME_SLOT_OPTIONS.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => toggleTimeSlot(t)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    filter.timeSlots.includes(t)
+                      ? 'bg-board-info text-white'
+                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="text-[10px] font-medium text-board-muted uppercase block mb-1">熬夜</span>
+              <div className="flex gap-1">
+                {([
+                  { k: 'any', label: '全部' },
+                  { k: 'yes', label: '能' },
+                  { k: 'no', label: '不能' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.k}
+                    onClick={() => setFilter({ ...filter, canStayUp: opt.k })}
+                    className={`flex-1 px-1 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      filter.canStayUp === opt.k
+                        ? 'bg-board-text text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] font-medium text-board-muted uppercase block mb-1">反串</span>
+              <div className="flex gap-1">
+                {([
+                  { k: 'any', label: '全部' },
+                  { k: 'yes', label: '可' },
+                  { k: 'no', label: '拒' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.k}
+                    onClick={() => setFilter({ ...filter, acceptCross: opt.k })}
+                    className={`flex-1 px-1 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      filter.acceptCross === opt.k
+                        ? 'bg-board-text text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -116,6 +249,18 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
             </div>
             <p className="text-sm text-board-muted mb-1">还没有玩家</p>
             <p className="text-xs text-gray-400">点击上方「添加」创建玩家卡片</p>
+          </div>
+        )}
+
+        {players.length > 0 && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm text-board-muted mb-1">没有符合筛选的玩家</p>
+            <button
+              onClick={() => setFilter(DEFAULT_FILTER)}
+              className="text-xs text-board-info hover:underline"
+            >
+              清除筛选条件
+            </button>
           </div>
         )}
       </div>
