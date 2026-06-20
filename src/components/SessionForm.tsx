@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session } from '@/types'
-import { SCRIPT_TYPES, WEEKDAY_LABELS, DAY_OF_WEEK_TO_KEY, KEY_TO_DAY_OF_WEEK } from '@/types'
-import type { SpecificDayKey } from '@/types'
+import { SCRIPT_TYPES, WEEKDAY_LABELS, DAY_OF_WEEK_TO_KEY, KEY_TO_DAY_OF_WEEK, TIME_RANGE_LABELS } from '@/types'
+import type { SpecificDayKey, TimeRangeKey } from '@/types'
 
 interface SessionFormProps {
   session?: Session
@@ -40,6 +40,9 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
   )
   const [dayType, setDayType] = useState<'weekday' | 'weekend' | 'any'>(session?.sessionTime?.dayType || 'any')
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'night' | 'late' | 'any'>(session?.sessionTime?.timeOfDay || 'any')
+  const [timeRange, setTimeRange] = useState<TimeRangeKey | null>(
+    session?.sessionTime?.timeRange || null
+  )
   const [slotCount, setSlotCount] = useState(6)
   const [slotGenders, setSlotGenders] = useState<string[]>(
     Array(6).fill('any')
@@ -61,6 +64,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
       ...(dayOfWeek !== null ? { dayOfWeek: KEY_TO_DAY_OF_WEEK[dayOfWeek] } : {}),
       dayType,
       timeOfDay,
+      ...(timeRange ? { timeRange } : {}),
     }
 
     if (isEdit) {
@@ -210,6 +214,39 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
                   }`}
                 >
                   {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-board-muted mb-1">
+              具体时间段 (可选，用于精细匹配)
+            </label>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => setTimeRange(null)}
+                className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                  timeRange === null
+                    ? 'bg-board-info text-white'
+                    : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                }`}
+              >
+                不限
+              </button>
+              {(Object.keys(TIME_RANGE_LABELS) as TimeRangeKey[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setTimeRange(k)}
+                  className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                    timeRange === k
+                      ? 'bg-board-info text-white'
+                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {TIME_RANGE_LABELS[k]}
                 </button>
               ))}
             </div>

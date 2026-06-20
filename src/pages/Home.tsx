@@ -15,6 +15,7 @@ import Toolbar from '@/components/Toolbar'
 import SessionPanel, { type SessionFilter } from '@/components/SessionPanel'
 import PlayerPanel from '@/components/PlayerPanel'
 import ConflictPanel from '@/components/ConflictPanel'
+import ReputationPanel from '@/components/ReputationPanel'
 import PlayerCard from '@/components/PlayerCard'
 import SessionForm from '@/components/SessionForm'
 import PlayerForm from '@/components/PlayerForm'
@@ -41,11 +42,12 @@ export default function Home() {
     dm: null,
     types: [],
   })
-  const [rightTab, setRightTab] = useState<'players' | 'conflicts'>('players')
+  const [rightTab, setRightTab] = useState<'players' | 'conflicts' | 'reputation'>('players')
   const [highlightSessionId, setHighlightSessionId] = useState<string | null>(null)
   const [highlightSlotId, setHighlightSlotId] = useState<string | null>(null)
   const [debriefSession, setDebriefSession] = useState<Session | undefined>()
   const [showDebrief, setShowDebrief] = useState(false)
+  const [temporarilyVisibleSessionId, setTemporarilyVisibleSessionId] = useState<string | null>(null)
 
   const sessions = useScheduleStore((s) => s.sessions)
   const currentWeekKey = useScheduleStore((s) => s.currentWeekKey)
@@ -59,6 +61,10 @@ export default function Home() {
     })
     .map((s) => s.id)
 
+  const displayFilteredIds = temporarilyVisibleSessionId
+    ? Array.from(new Set([...filteredSessionIds, temporarilyVisibleSessionId]))
+    : filteredSessionIds
+
   const activeHintSlotId = overSlotId || hoveredSlotId
   const activeHintSessionId = activeHintSlotId
     ? sessionSlots.find((s) => s.id === activeHintSlotId)?.sessionId
@@ -68,6 +74,14 @@ export default function Home() {
   if (activeHintSlotId && activePlayerId && activeHintSessionId) {
     sessionHints[activeHintSessionId] = getHints(activePlayerId, activeHintSessionId, activeHintSlotId)
   }
+
+  useEffect(() => {
+    if (!temporarilyVisibleSessionId) return
+    const t = setTimeout(() => {
+      setTemporarilyVisibleSessionId(null)
+    }, 4500)
+    return () => clearTimeout(t)
+  }, [temporarilyVisibleSessionId])
 
   useEffect(() => {
     if (!activeHintSlotId) return
@@ -184,26 +198,23 @@ export default function Home() {
 
   const handleLocateSession = useCallback(
     (sessionId: string, playerId?: string, slotId?: string) => {
-      const el = document.getElementById(`session-${sessionId}`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+      setTemporarilyVisibleSessionId(sessionId)
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`session-${sessionId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      })
       setHighlightSessionId(sessionId)
-      setTimeout(() => setHighlightSessionId(null), 2000)
+      setTimeout(() => setHighlightSessionId(null), 2500)
       if (slotId) {
         setHighlightSlotId(slotId)
-        setTimeout(() => setHighlightSlotId(null), 2500)
+        setTimeout(() => setHighlightSlotId(null), 3000)
       } else {
         setHighlightSlotId(null)
       }
-      if (playerId) {
-        const player = getPlayerById(playerId)
-        if (player) {
-          // 可以在这里加更多高亮逻辑
-        }
-      }
     },
-    [getPlayerById]
+    []
   )
 
   const activePlayer = activePlayerId ? getPlayerById(activePlayerId) : null
@@ -239,13 +250,14 @@ export default function Home() {
               onFilterChange={setSessionFilter}
               highlightSessionId={highlightSessionId}
               highlightSlotId={highlightSlotId}
+              forcedVisibleSessionId={temporarilyVisibleSessionId}
             />
           </div>
           <div className="w-[42%] flex flex-col">
             <div className="flex border-b border-board-border shrink-0">
               <button
                 onClick={() => setRightTab('players')}
-                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                   rightTab === 'players'
                     ? 'text-board-text border-b-2 border-board-accent'
                     : 'text-board-muted hover:text-board-text'
@@ -255,13 +267,23 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setRightTab('conflicts')}
-                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors relative ${
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors relative ${
                   rightTab === 'conflicts'
                     ? 'text-board-text border-b-2 border-board-accent'
                     : 'text-board-muted hover:text-board-text'
                 }`}
               >
                 冲突提醒
+              </button>
+              <button
+                onClick={() => setRightTab('reputation')}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  rightTab === 'reputation'
+                    ? 'text-board-text border-b-2 border-board-accent'
+                    : 'text-board-muted hover:text-board-text'
+                }`}
+              >
+                信誉看板
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -281,6 +303,11 @@ export default function Home() {
                       setShowPlayerForm(true)
                     }
                   }}
+                />
+              )}
+              {rightTab === 'reputation' && (
+                <ReputationPanel
+                  onEditPlayer={handleEditPlayer}
                 />
               )}
             </div>

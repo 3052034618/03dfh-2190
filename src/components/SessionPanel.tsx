@@ -23,6 +23,7 @@ interface SessionPanelProps {
   onFilterChange: (filter: SessionFilter) => void
   highlightSessionId?: string | null
   highlightSlotId?: string | null
+  forcedVisibleSessionId?: string | null
 }
 
 export default function SessionPanel({
@@ -38,6 +39,7 @@ export default function SessionPanel({
   onFilterChange,
   highlightSessionId,
   highlightSlotId,
+  forcedVisibleSessionId,
 }: SessionPanelProps) {
   const sessions = useScheduleStore((s) => s.sessions)
   const getShops = useScheduleStore((s) => s.getShops)
@@ -47,12 +49,19 @@ export default function SessionPanel({
   const dms = getDMs()
 
   const weekSessions = sessions.filter((s) => s.weekKey === currentWeekKey)
-  const filteredSessions = weekSessions.filter((s) => {
+  let filteredSessions = weekSessions.filter((s) => {
     if (filter.shop && s.shopName !== filter.shop) return false
     if (filter.dm && s.dmName !== filter.dm) return false
     if (filter.types.length > 0 && !filter.types.some((t) => s.scriptTypes.includes(t))) return false
     return true
   })
+
+  if (forcedVisibleSessionId) {
+    const forced = weekSessions.find((s) => s.id === forcedVisibleSessionId)
+    if (forced && !filteredSessions.find((s) => s.id === forcedVisibleSessionId)) {
+      filteredSessions = [...filteredSessions, forced]
+    }
+  }
 
   const hasAnyFilter = !!filter.shop || !!filter.dm || filter.types.length > 0
 

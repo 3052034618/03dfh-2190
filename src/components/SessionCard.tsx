@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Clock, MapPin, User, Users, CreditCard, ClipboardList, CheckCircle2, XCircle } from 'lucide-react'
+import { Pencil, Trash2, Clock, MapPin, User, Users, CreditCard, ClipboardList, CheckCircle2, XCircle, AlertTriangle, ThumbsUp } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session, Hint } from '@/types'
@@ -32,7 +32,18 @@ export default function SessionCard({
 }: SessionCardProps) {
   const getSlotsForSession = useScheduleStore((s) => s.getSlotsForSession)
   const getPlayerById = useScheduleStore((s) => s.getPlayerById)
+  const getRecordsForSession = useScheduleStore((s) => s.getRecordsForSession)
   const slots = getSlotsForSession(session.id)
+  const records = session.status === 'played' ? getRecordsForSession(session.id) : []
+
+  const debriefStats = records.length > 0 ? {
+    onTime: records.filter(r => r.attendance === 'on-time').length,
+    late: records.filter(r => r.attendance === 'late').length,
+    noShow: records.filter(r => r.attendance === 'no-show').length,
+    canceled: records.filter(r => r.attendance === 'canceled').length,
+    positive: records.filter(r => r.isPositiveFeedback).length,
+    total: records.length,
+  } : null
 
   const depositColor: Record<string, string> = {
     paid: 'bg-board-success text-white',
@@ -140,6 +151,41 @@ export default function SessionCard({
             {DEPOSIT_STATUS_LABELS[session.depositStatus]}
           </span>
         </div>
+
+        {debriefStats && (
+          <div className="mt-2.5 pt-2.5 border-t border-dashed border-gray-200">
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1 text-emerald-600">
+                <CheckCircle2 className="w-3 h-3" />
+                {debriefStats.onTime}准时
+              </span>
+              {debriefStats.late > 0 && (
+                <span className="flex items-center gap-1 text-amber-600">
+                  <Clock className="w-3 h-3" />
+                  {debriefStats.late}迟到
+                </span>
+              )}
+              {debriefStats.noShow > 0 && (
+                <span className="flex items-center gap-1 text-rose-600">
+                  <AlertTriangle className="w-3 h-3" />
+                  {debriefStats.noShow}爽约
+                </span>
+              )}
+              {debriefStats.canceled > 0 && (
+                <span className="flex items-center gap-1 text-gray-500">
+                  <XCircle className="w-3 h-3" />
+                  {debriefStats.canceled}取消
+                </span>
+              )}
+              {debriefStats.positive > 0 && (
+                <span className="flex items-center gap-1 text-sky-600">
+                  <ThumbsUp className="w-3 h-3" />
+                  {debriefStats.positive}好评
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 pb-3 space-y-1.5">

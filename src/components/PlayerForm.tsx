@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { X, Trash2, Plus } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
-import type { Player, PlayRecord, TimePreference } from '@/types'
-import { SCRIPT_TYPES, DEFAULT_TIME_PREFERENCE, TIME_PREFERENCE_LABELS, WEEKDAY_LABELS } from '@/types'
+import type { Player, PlayRecord, TimePreference, SpecificDayKey, TimeRangeKey } from '@/types'
+import { SCRIPT_TYPES, DEFAULT_TIME_PREFERENCE, TIME_PREFERENCE_LABELS, WEEKDAY_LABELS, TIME_RANGE_LABELS } from '@/types'
 
 interface PlayerFormProps {
   player?: Player
@@ -227,16 +227,23 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
               <div className="text-[10px] font-medium text-board-muted uppercase tracking-wide mb-1">
                 具体星期几 (可选)
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 mb-2">
                 {(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const).map((key) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => {
                       const sd = timePreference.specificDays || { ...DEFAULT_TIME_PREFERENCE.specificDays! }
+                      const newVal = !sd[key]
+                      const newSD = { ...sd, [key]: newVal }
+                      let newDTS = timePreference.dayTimeSlots || []
+                      if (!newVal) {
+                        newDTS = newDTS.filter((s) => s.day !== key)
+                      }
                       setTimePreference({
                         ...timePreference,
-                        specificDays: { ...sd, [key]: !sd[key] },
+                        specificDays: newSD,
+                        dayTimeSlots: newDTS,
                       })
                     }}
                     className={`flex-1 py-1.5 rounded text-[10px] font-medium transition-colors ${
@@ -249,6 +256,53 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
                   </button>
                 ))}
               </div>
+
+              {(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const)
+                .filter((d) => timePreference.specificDays?.[d]).length > 0 && (
+                <div className="space-y-1.5 border-t border-dashed border-gray-200 pt-2">
+                  {(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const)
+                    .filter((d) => timePreference.specificDays?.[d])
+                    .map((day) => {
+                      const slots = timePreference.dayTimeSlots || []
+                      const existing = slots.find((s) => s.day === day)
+                      const ranges: TimeRangeKey[] = existing?.timeRanges || []
+                      const toggleRange = (r: TimeRangeKey) => {
+                        const newSlots = slots.filter((s) => s.day !== day)
+                        const newRanges = ranges.includes(r)
+                          ? ranges.filter((x) => x !== r)
+                          : [...ranges, r]
+                        if (newRanges.length > 0) {
+                          newSlots.push({ day, timeRanges: newRanges })
+                        }
+                        setTimePreference({ ...timePreference, dayTimeSlots: newSlots })
+                      }
+                      return (
+                        <div key={day}>
+                          <div className="text-[10px] font-medium text-board-accent mb-0.5 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-board-accent inline-block" />
+                            {WEEKDAY_LABELS[day]} 可用时段
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {(Object.keys(TIME_RANGE_LABELS) as TimeRangeKey[]).map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => toggleRange(r)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                  ranges.includes(r)
+                                    ? 'bg-board-info text-white'
+                                    : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                                }`}
+                              >
+                                {TIME_RANGE_LABELS[r]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
             </div>
             <p className="mt-1.5 text-[10px] text-gray-400">
               未选任何时段时视为未填写，不参与时间冲突判断

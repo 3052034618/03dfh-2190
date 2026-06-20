@@ -402,8 +402,21 @@ interface ScheduleStore {
     onTimeCount: number
     lateCount: number
     noShowCount: number
+    canceledCount: number
     avgLateMinutes: number
+    positiveCount: number
   }
+  getPlayerReputationStats: (playerId: string, limit?: number) => {
+    recentRecords: SessionPlayerRecord[]
+    reliabilityScore: number
+    needConfirm: boolean
+  }
+  getReputationRanking: () => {
+    playerId: string
+    stats: ReturnType<ScheduleStore['getPlayerStats']>
+    reliabilityScore: number
+    needConfirm: boolean
+  }[]
 
   getHints: (playerId: string, sessionId: string, excludeSlotId?: string) => Hint[]
   getAllSessionHints: (sessionId: string) => Hint[]
@@ -577,11 +590,56 @@ export const useScheduleStore = create<ScheduleStore>()(
         const onTimeCount = records.filter((r) => r.attendance === 'on-time').length
         const lateCount = records.filter((r) => r.attendance === 'late').length
         const noShowCount = records.filter((r) => r.attendance === 'no-show').length
+        const canceledCount = records.filter((r) => r.attendance === 'canceled').length
+        const positiveCount = records.filter((r) => r.isPositiveFeedback).length
         const lateRecords = records.filter((r) => r.attendance === 'late')
         const avgLateMinutes = lateRecords.length > 0
           ? Math.round(lateRecords.reduce((sum, r) => sum + (r.lateMinutes || 0), 0) / lateRecords.length)
           : 0
-        return { totalSessions, onTimeCount, lateCount, noShowCount, avgLateMinutes }
+        return { totalSessions, onTimeCount, lateCount, noShowCount, canceledCount, avgLateMinutes, positiveCount }
+      },
+
+      getPlayerReputationStats: (playerId, limit = 5) => {
+        const allRecords = get().sessionPlayerRecords
+          .filter((r) => r.playerId === playerId)
+          .sort((a, b) => b.createdAt - a.createdAt)
+        const recentRecords = allRecords.slice(0, limit)
+        if (recentRecords.length === 0) {
+          return { recentRecords, reliabilityScore: 100, needConfirm: false }
+        }
+        let score = 100
+        let needConfirm = false
+        for (const r of recentRecords) {
+          if (r.attendance === 'no-show') { score -= 40; needConfirm = true }
+          else if (r.attendance === 'canceled') { score -= 15; needConfirm = true }
+          else if (r.attendance === 'late') { score -= Math.min(15, (r.lateMinutes || 0) / 5) }
+          if (r.isPositiveFeedback) score += 5
+        }
+        score = Math.max(0, Math.min(100, Math.round(score)))
+        return { recentRecords, reliabilityScore: score, needConfirm }
+      },
+
+      getReputationRanking: () => {
+        const { players, sessionPlayerRecords } = get()
+        if (sessionPlayerRecords.length === 0) {
+          return players.map((p) => ({
+            playerId: p.id,
+            stats: { totalSessions: 0, onTimeCount: 0, lateCount: 0, noShowCount: 0, canceledCount: 0, avgLateMinutes: 0, positiveCount: 0 },
+            reliabilityScore: 100,
+            needConfirm: false,
+          }))
+        }
+        return players.map((p) => {
+          const stats = get().getPlayerStats(p.id)
+          const { reliabilityScore, needConfirm } = get().getPlayerReputationStats(p.id)
+          return { playerId: p.id, stats, reliabilityScore, needConfirm }
+        }).sort((a, b) => {
+          if (a.needConfirm !== b.needConfirm) return a.needConfirm ? 1 : -1
+          if (b.stats.totalSessions === 0 && a.stats.totalSessions === 0) return 0
+          if (b.stats.totalSessions === 0) return -1
+          if (a.stats.totalSessions === 0) return 1
+          return b.reliabilityScore - a.reliabilityScore
+        })
       },
 
       getHints: (playerId, sessionId, excludeSlotId) => {
@@ -624,7 +682,7 @@ export const useScheduleStore = create<ScheduleStore>()(
     }),
     {
       name: 'schedule-board-storage',
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, version: number) => {
         const state = persistedState as ScheduleStore
         if (version < 2 && state.players) {
@@ -655,6 +713,23 @@ export const useScheduleStore = create<ScheduleStore>()(
           }
           if (!state.sessionPlayerRecords) {
             state.sessionPlayerRecords = []
+          }
+        }
+        if (version < 4) {
+          if (state.players) {
+            state.players = state.players.map((p) => ({
+              ...p,
+              timePreference: {
+                ...p.timePreference,
+                dayTimeSlots: ((p.timePreference as any)?.dayTimeSlots) || [],
+              },
+            }))
+          }
+          if (state.sessionPlayerRecords) {
+            state.sessionPlayerRecords = state.sessionPlayerRecords.map((r) => ({
+              ...r,
+              isPositiveFeedback: (r as any).isPositiveFeedback ?? false,
+            }))
           }
         }
         return persistedState

@@ -82,14 +82,23 @@ export default function ExportModal({ onClose, filterSessionIds }: ExportModalPr
     const playedSessions = weekSessions.filter((s) => s.status === 'played')
     if (playedSessions.length === 0) {
       return (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-            <ClipboardList className="w-8 h-8 text-gray-400" />
+        <div className="text-center py-16">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center mx-auto mb-4 border-2 border-dashed border-amber-200">
+            <ClipboardList className="w-10 h-10 text-amber-400" />
           </div>
+          <p className="text-base font-semibold text-board-text mb-1">本周车局复盘进度 0%</p>
           <p className="text-sm text-board-muted mb-1">暂无已完成的车局</p>
-          <p className="text-xs text-gray-400">请先在车局卡片上点击「复盘」按钮完成复盘</p>
+          <p className="text-xs text-gray-400 mb-4">开完车后，在车局卡片上点击「复盘」按钮记录</p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-board-bg border border-dashed border-gray-200">
+            <Calendar className="w-3.5 h-3.5 text-board-muted" />
+            <span className="text-xs text-board-muted">{currentWeekKey} · 内部管理</span>
+          </div>
         </div>
       )
+    }
+
+    const overallStats = {
+      total: 0, onTime: 0, late: 0, noShow: 0, canceled: 0, positive: 0,
     }
 
     return (
@@ -100,98 +109,174 @@ export default function ExportModal({ onClose, filterSessionIds }: ExportModalPr
             .filter((s) => s.sessionId === session.id)
             .sort((a, b) => a.slotIndex - b.slotIndex)
 
+          const filled = slots.filter((s) => s.playerId)
+          const onTime = filled.filter((s) => {
+            const r = records.find((rr) => rr.slotId === s.id)
+            return r?.attendance === 'on-time'
+          }).length
+          const late = filled.filter((s) => {
+            const r = records.find((rr) => rr.slotId === s.id)
+            return r?.attendance === 'late'
+          }).length
+          const noShow = filled.filter((s) => {
+            const r = records.find((rr) => rr.slotId === s.id)
+            return r?.attendance === 'no-show'
+          }).length
+          const canceled = filled.filter((s) => {
+            const r = records.find((rr) => rr.slotId === s.id)
+            return r?.attendance === 'canceled'
+          }).length
+          const positive = records.filter((r) => r.isPositiveFeedback).length
+
+          overallStats.total += filled.length
+          overallStats.onTime += onTime
+          overallStats.late += late
+          overallStats.noShow += noShow
+          overallStats.canceled += canceled
+          overallStats.positive += positive
+
+          const abnormalRecords = records.filter(
+            (r) => r.attendance !== 'on-time'
+          )
+          const positiveNotes = records.filter(
+            (r) => r.isPositiveFeedback || (r.experienceNote && r.attendance === 'on-time')
+          )
+
           return (
-            <div key={session.id} className="bg-board-surface rounded-lg border border-board-border p-3.5">
-              <div className="flex items-start justify-between mb-2">
+            <div key={session.id} className="bg-board-surface rounded-lg border border-board-border overflow-hidden">
+              <div className="px-3.5 py-2.5 bg-gray-50 border-b border-board-border flex items-start justify-between">
                 <div className="min-w-0 pr-2">
                   <h4 className="text-sm font-semibold text-board-text leading-tight">
                     {session.scriptName}
                   </h4>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-board-muted mt-1">
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-board-muted mt-0.5">
+                    <span>{filled.length}人</span>
                     {session.estimatedDuration}h
                     {opts.showDM && session.dmName && <span>DM: {session.dmName}</span>}
                     {opts.showShop && session.shopName && <span>{session.shopName}</span>}
                   </div>
                 </div>
-                {opts.showDeposit && (
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium shrink-0 ${
-                      session.depositStatus === 'paid'
-                        ? 'bg-board-success text-white'
-                        : session.depositStatus === 'partial'
-                        ? 'bg-board-accent text-white'
-                        : 'bg-board-danger text-white'
-                    }`}
-                  >
-                    {DEPOSIT_STATUS_LABELS[session.depositStatus]}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                {slots.map((slot) => {
-                  const player = slot.playerId ? getPlayerById(slot.playerId) : null
-                  const record = records.find((r) => r.slotId === slot.id)
-                  if (!player) return null
-
-                  const playerLabel = opts.playerMode === 'short'
-                    ? toShortName(player.nickname)
-                    : player.nickname
-
-                  return (
-                    <div
-                      key={slot.id}
-                      className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md border text-xs ${
-                        record ? getAttendanceColor(record.attendance) : 'bg-gray-50 text-gray-500 border-gray-200'
+                <div className="flex items-center gap-2 shrink-0">
+                  {opts.showDeposit && (
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        session.depositStatus === 'paid'
+                          ? 'bg-board-success text-white'
+                          : session.depositStatus === 'partial'
+                          ? 'bg-board-accent text-white'
+                          : 'bg-board-danger text-white'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{playerLabel}</span>
-                        {opts.showSlotGender && (
-                          <span className="text-[10px] opacity-60">
-                            ({GENDER_LABELS[slot.requiredGender]})
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {record ? (
-                          <>
+                      {DEPOSIT_STATUS_LABELS[session.depositStatus]}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-3.5 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] mb-2">
+                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                    ✓ 准时 {onTime}
+                  </span>
+                  {late > 0 && (
+                    <span className="flex items-center gap-1 text-amber-600 font-medium">
+                      迟到 {late}
+                    </span>
+                  )}
+                  {noShow > 0 && (
+                    <span className="flex items-center gap-1 text-rose-600 font-medium">
+                      爽约 {noShow}
+                    </span>
+                  )}
+                  {canceled > 0 && (
+                    <span className="flex items-center gap-1 text-gray-500 font-medium">
+                      取消 {canceled}
+                    </span>
+                  )}
+                  {positive > 0 && (
+                    <span className="flex items-center gap-1 text-sky-600 font-medium">
+                      👍 {positive}
+                    </span>
+                  )}
+                </div>
+
+                {abnormalRecords.length > 0 && (
+                  <div className="space-y-1 pt-1.5 border-t border-dashed border-gray-200">
+                    {abnormalRecords.map((record) => {
+                      const player = getPlayerById(record.playerId)
+                      const slot = slots.find((s) => s.id === record.slotId)
+                      if (!player) return null
+                      const playerLabel = opts.playerMode === 'short'
+                        ? toShortName(player.nickname)
+                        : player.nickname
+
+                      return (
+                        <div
+                          key={record.id}
+                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md border text-xs ${getAttendanceColor(record.attendance)}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{playerLabel}</span>
+                            {opts.showSlotGender && slot && (
+                              <span className="text-[10px] opacity-60">
+                                ({GENDER_LABELS[slot.requiredGender]})
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
                             <span className="text-[10px] font-medium">
                               {ATTENDANCE_LABELS[record.attendance]}
                             </span>
                             {record.attendance === 'late' && record.lateMinutes && record.lateMinutes > 0 && (
                               <span className="text-[10px]">迟{record.lateMinutes}分</span>
                             )}
-                          </>
-                        ) : (
-                          <span className="text-[10px] opacity-50">未复盘</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
 
-              {records.some((r) => r.experienceNote) && (
-                <div className="mt-2 pt-2 border-t border-dashed border-gray-200 space-y-1">
-                  {records.filter((r) => r.experienceNote).map((record) => {
-                    const player = getPlayerById(record.playerId)
-                    if (!player) return null
-                    const playerLabel = opts.playerMode === 'short'
-                      ? toShortName(player.nickname)
-                      : player.nickname
-                    return (
-                      <div key={record.id} className="text-[11px] text-board-muted">
-                        <span className="font-medium text-board-text">{playerLabel}：</span>
-                        {record.experienceNote}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                {(positiveNotes.length > 0 || records.some((r) => r.experienceNote)) && (
+                  <div className="mt-1.5 pt-1.5 border-t border-dashed border-gray-200 space-y-1">
+                    {records
+                      .filter((r) => r.experienceNote || (r.isPositiveFeedback && r.attendance === 'on-time'))
+                      .map((record) => {
+                        const player = getPlayerById(record.playerId)
+                        if (!player) return null
+                        const playerLabel = opts.playerMode === 'short'
+                          ? toShortName(player.nickname)
+                          : player.nickname
+                        return (
+                          <div key={record.id} className="text-[11px] text-board-muted">
+                            {record.isPositiveFeedback && (
+                              <span className="text-sky-600 font-medium">👍</span>
+                            )}
+                            <span className="font-medium text-board-text ml-0.5">{playerLabel}：</span>
+                            {record.experienceNote || (record.isPositiveFeedback ? '体验良好' : '')}
+                          </div>
+                        )
+                      })}
+                  </div>
+                )}
+              </div>
             </div>
           )
         })}
+
+        {playedSessions.length > 1 && (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200 p-3">
+            <div className="text-[10px] font-medium text-amber-800 mb-1.5 uppercase tracking-wide">本周汇总</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span className="text-board-text font-medium">共 {overallStats.total} 人次</span>
+              <span className="text-emerald-600">准时 {overallStats.onTime}</span>
+              {overallStats.late > 0 && <span className="text-amber-600">迟到 {overallStats.late}</span>}
+              {overallStats.noShow > 0 && <span className="text-rose-600">爽约 {overallStats.noShow}</span>}
+              {overallStats.canceled > 0 && <span className="text-gray-500">取消 {overallStats.canceled}</span>}
+              {overallStats.positive > 0 && <span className="text-sky-600">好评 {overallStats.positive}</span>}
+            </div>
+          </div>
+        )}
       </div>
     )
   }

@@ -2,8 +2,8 @@ import { Search, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import PlayerCard from './PlayerCard'
-import type { Player, TimePreference, SpecificDayKey } from '@/types'
-import { SCRIPT_TYPES, TIME_PREFERENCE_LABELS, hasAnyTimePreference, hasSpecificDayPreference, WEEKDAY_LABELS } from '@/types'
+import type { Player, TimePreference, SpecificDayKey, TimeRangeKey } from '@/types'
+import { SCRIPT_TYPES, TIME_PREFERENCE_LABELS, hasAnyTimePreference, hasSpecificDayPreference, WEEKDAY_LABELS, TIME_RANGE_LABELS, hasDayTimeSlots } from '@/types'
 
 interface PlayerPanelProps {
   onAddPlayer: () => void
@@ -17,6 +17,8 @@ interface TimeFilter {
   weekendNight: boolean
   lateNight: boolean
   specificDays: Record<SpecificDayKey, boolean>
+  filterTimeRanges?: boolean
+  timeRanges: Record<TimeRangeKey, boolean>
 }
 
 interface FilterState {
@@ -37,6 +39,14 @@ const DEFAULT_SPECIFIC_DAYS: Record<SpecificDayKey, boolean> = {
   sunday: false,
 }
 
+const DEFAULT_TIME_RANGES: Record<TimeRangeKey, boolean> = {
+  morning: false,
+  afternoon: false,
+  evening: false,
+  night: false,
+  'late-night': false,
+}
+
 const DEFAULT_TIME_FILTER: TimeFilter = {
   weekdayDay: false,
   weekdayNight: false,
@@ -44,12 +54,13 @@ const DEFAULT_TIME_FILTER: TimeFilter = {
   weekendNight: false,
   lateNight: false,
   specificDays: { ...DEFAULT_SPECIFIC_DAYS },
+  timeRanges: { ...DEFAULT_TIME_RANGES },
 }
 
 const DEFAULT_FILTER: FilterState = {
   search: '',
   types: [],
-  time: { ...DEFAULT_TIME_FILTER, specificDays: { ...DEFAULT_SPECIFIC_DAYS } },
+  time: { ...DEFAULT_TIME_FILTER, specificDays: { ...DEFAULT_SPECIFIC_DAYS }, timeRanges: { ...DEFAULT_TIME_RANGES } },
   canStayUp: 'any',
   acceptCross: 'any',
 }
@@ -57,21 +68,48 @@ const DEFAULT_FILTER: FilterState = {
 const SPECIFIC_DAY_KEYS: SpecificDayKey[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 function hasTimeFilter(tf: TimeFilter): boolean {
+  const hasTimeRangeFilter = Object.values(tf.timeRanges).some((v) => v)
   return (
     tf.weekdayDay ||
     tf.weekdayNight ||
     tf.weekendDay ||
     tf.weekendNight ||
     tf.lateNight ||
-    SPECIFIC_DAY_KEYS.some((k) => tf.specificDays[k])
+    SPECIFIC_DAY_KEYS.some((k) => tf.specificDays[k]) ||
+    hasTimeRangeFilter
   )
 }
+
+const TIME_RANGE_KEYS: TimeRangeKey[] = ['morning', 'afternoon', 'evening', 'night', 'late-night']
 
 function matchesTimeFilter(pref: TimePreference, filter: TimeFilter): boolean {
   if (!hasTimeFilter(filter)) return true
   if (!hasAnyTimePreference(pref)) return true
 
   const hasSpecificFilter = SPECIFIC_DAY_KEYS.some((k) => filter.specificDays[k])
+  const hasTimeRangeFilter = TIME_RANGE_KEYS.some((k) => filter.timeRanges[k])
+
+  if (hasTimeRangeFilter && hasDayTimeSlots(pref)) {
+    for (const slot of pref.dayTimeSlots!) {
+      if (hasSpecificFilter && !filter.specificDays[slot.day]) continue
+      const matchedRange = slot.timeRanges.some((r) => filter.timeRanges[r])
+      if (matchedRange) return true
+    }
+    if (hasSpecificFilter) {
+      const matched = SPECIFIC_DAY_KEYS.some(
+        (k) => filter.specificDays[k] && pref.specificDays?.[k]
+      )
+      if (matched) return true
+    }
+    const matchedGeneral =
+      (filter.weekdayDay && pref.weekdayDay) ||
+      (filter.weekdayNight && pref.weekdayNight) ||
+      (filter.weekendDay && pref.weekendDay) ||
+      (filter.weekendNight && pref.weekendNight) ||
+      (filter.lateNight && pref.lateNight)
+    if (matchedGeneral) return true
+    if (hasSpecificFilter || hasTimeRangeFilter) return false
+  }
 
   if (hasSpecificFilter) {
     if (hasSpecificDayPreference(pref)) {
@@ -134,6 +172,19 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
         specificDays: {
           ...f.time.specificDays,
           [key]: !f.time.specificDays[key],
+        },
+      },
+    }))
+  }
+
+  const toggleTimeRange = (key: TimeRangeKey) => {
+    setFilter((f) => ({
+      ...f,
+      time: {
+        ...f.time,
+        timeRanges: {
+          ...f.time.timeRanges,
+          [key]: !f.time.timeRanges[key],
         },
       },
     }))
@@ -230,7 +281,7 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
 
             <div className="mb-1.5">
               <div className="text-[9px] text-board-muted mb-1">具体星期几</div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 mb-1.5">
                 {SPECIFIC_DAY_KEYS.map((k) => (
                   <button
                     key={k}
@@ -242,6 +293,24 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
                     }`}
                   >
                     {WEEKDAY_LABELS[k]}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[9px] text-board-muted mb-1">
+                具体时段 (不选星期几单独按时段也生效)
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {TIME_RANGE_KEYS.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => toggleTimeRange(k)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      filter.time.timeRanges[k]
+                        ? 'bg-board-info text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {TIME_RANGE_LABELS[k]}
                   </button>
                 ))}
               </div>
