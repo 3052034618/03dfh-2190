@@ -5,7 +5,7 @@ import type { Session, Hint } from '@/types'
 import { getHintColor } from '@/utils/helpers'
 
 interface ConflictPanelProps {
-  onLocateSession: (sessionId: string, playerId?: string) => void
+  onLocateSession: (sessionId: string, playerId?: string, slotId?: string) => void
   onEditPlayer: (playerId: string) => void
 }
 
@@ -50,7 +50,7 @@ export default function ConflictPanel({ onLocateSession, onEditPlayer }: Conflic
   }
 
   const handleHintClick = (sessionId: string, hint: Hint) => {
-    onLocateSession(sessionId, hint.targetPlayerId)
+    onLocateSession(sessionId, hint.targetPlayerId, hint.targetSlotId)
   }
 
   return (

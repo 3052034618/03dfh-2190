@@ -19,6 +19,7 @@ import PlayerCard from '@/components/PlayerCard'
 import SessionForm from '@/components/SessionForm'
 import PlayerForm from '@/components/PlayerForm'
 import ExportModal from '@/components/ExportModal'
+import DebriefModal from '@/components/DebriefModal'
 
 export default function Home() {
   const assignPlayer = useScheduleStore((s) => s.assignPlayer)
@@ -42,6 +43,9 @@ export default function Home() {
   })
   const [rightTab, setRightTab] = useState<'players' | 'conflicts'>('players')
   const [highlightSessionId, setHighlightSessionId] = useState<string | null>(null)
+  const [highlightSlotId, setHighlightSlotId] = useState<string | null>(null)
+  const [debriefSession, setDebriefSession] = useState<Session | undefined>()
+  const [showDebrief, setShowDebrief] = useState(false)
 
   const sessions = useScheduleStore((s) => s.sessions)
   const currentWeekKey = useScheduleStore((s) => s.currentWeekKey)
@@ -152,6 +156,11 @@ export default function Home() {
     setShowSessionForm(true)
   }, [])
 
+  const handleDebriefSession = useCallback((session: Session) => {
+    setDebriefSession(session)
+    setShowDebrief(true)
+  }, [])
+
   const handleNewPlayer = useCallback(() => {
     setEditPlayer(undefined)
     setShowPlayerForm(true)
@@ -174,13 +183,19 @@ export default function Home() {
   )
 
   const handleLocateSession = useCallback(
-    (sessionId: string, playerId?: string) => {
+    (sessionId: string, playerId?: string, slotId?: string) => {
       const el = document.getElementById(`session-${sessionId}`)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
       setHighlightSessionId(sessionId)
       setTimeout(() => setHighlightSessionId(null), 2000)
+      if (slotId) {
+        setHighlightSlotId(slotId)
+        setTimeout(() => setHighlightSlotId(null), 2500)
+      } else {
+        setHighlightSlotId(null)
+      }
       if (playerId) {
         const player = getPlayerById(playerId)
         if (player) {
@@ -212,6 +227,7 @@ export default function Home() {
             <SessionPanel
               onNewSession={handleNewSession}
               onEditSession={handleEditSession}
+              onDebriefSession={handleDebriefSession}
               sessionHints={sessionHints}
               onRemovePlayer={handleRemovePlayer}
               onPlayerClick={handlePlayerClick}
@@ -222,6 +238,7 @@ export default function Home() {
               filter={sessionFilter}
               onFilterChange={setSessionFilter}
               highlightSessionId={highlightSessionId}
+              highlightSlotId={highlightSlotId}
             />
           </div>
           <div className="w-[42%] flex flex-col">
@@ -304,6 +321,16 @@ export default function Home() {
       )}
 
       {showExport && <ExportModal onClose={() => setShowExport(false)} filterSessionIds={filteredSessionIds} />}
+
+      {showDebrief && debriefSession && (
+        <DebriefModal
+          session={debriefSession}
+          onClose={() => {
+            setShowDebrief(false)
+            setDebriefSession(undefined)
+          }}
+        />
+      )}
     </DndContext>
   )
 }

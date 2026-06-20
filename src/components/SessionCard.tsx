@@ -1,29 +1,33 @@
-import { Pencil, Trash2, Clock, MapPin, User, Users, CreditCard } from 'lucide-react'
+import { Pencil, Trash2, Clock, MapPin, User, Users, CreditCard, ClipboardList, CheckCircle2, XCircle } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session, Hint } from '@/types'
-import { DEPOSIT_STATUS_LABELS, GENDER_LABELS } from '@/types'
+import { DEPOSIT_STATUS_LABELS, GENDER_LABELS, SESSION_STATUS_LABELS } from '@/types'
 import { getHintIcon, getHintColor } from '@/utils/helpers'
 
 interface SessionCardProps {
   session: Session
   onEdit: () => void
+  onDebrief: () => void
   hints: Hint[]
   onRemovePlayer: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
   onSlotHover: (slotId: string | null) => void
   hoveredSlotId: string | null
+  highlightSlotId?: string | null
   isHighlighted?: boolean
 }
 
 export default function SessionCard({
   session,
   onEdit,
+  onDebrief,
   hints,
   onRemovePlayer,
   onPlayerClick,
   onSlotHover,
   hoveredSlotId,
+  highlightSlotId,
   isHighlighted = false,
 }: SessionCardProps) {
   const getSlotsForSession = useScheduleStore((s) => s.getSlotsForSession)
@@ -34,6 +38,18 @@ export default function SessionCard({
     paid: 'bg-board-success text-white',
     unpaid: 'bg-board-danger text-white',
     partial: 'bg-board-accent text-white',
+  }
+
+  const statusColor: Record<string, string> = {
+    scheduled: 'bg-blue-100 text-blue-700',
+    played: 'bg-emerald-100 text-emerald-700',
+    canceled: 'bg-gray-200 text-gray-500',
+  }
+
+  const statusIcon: Record<string, React.ReactNode> = {
+    scheduled: null,
+    played: <CheckCircle2 className="w-3 h-3" />,
+    canceled: <XCircle className="w-3 h-3" />,
   }
 
   const typeColor: Record<string, string> = {
@@ -51,11 +67,17 @@ export default function SessionCard({
   return (
     <div className={`bg-board-surface rounded-xl border overflow-hidden card-hover transition-all duration-300 ${
       isHighlighted ? 'border-board-accent shadow-lg shadow-board-accent/20 scale-[1.01]' : 'border-board-border'
-    }`}>
+    } ${session.status === 'canceled' ? 'opacity-60 grayscale' : ''}`}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between mb-2">
           <div className="min-w-0 flex-1 pr-2">
-            <h3 className="text-sm font-semibold text-board-text leading-tight truncate">{session.scriptName}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold text-board-text leading-tight truncate">{session.scriptName}</h3>
+              <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColor[session.status]}`}>
+                {statusIcon[session.status]}
+                {SESSION_STATUS_LABELS[session.status]}
+              </span>
+            </div>
             {session.scriptTypes && session.scriptTypes.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {session.scriptTypes.map((t) => (
@@ -69,10 +91,18 @@ export default function SessionCard({
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); onDebrief() }}
+              className="p-1 rounded text-board-muted hover:text-board-accent hover:bg-amber-50 transition-colors"
+              title="复盘"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); onEdit() }}
               className="p-1 rounded text-board-muted hover:text-board-text hover:bg-gray-100 transition-colors"
+              title="编辑"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -124,6 +154,7 @@ export default function SessionCard({
               onPlayerClick={onPlayerClick}
               onHover={onSlotHover}
               isHovered={hoveredSlotId === slot.id}
+              isHighlighted={highlightSlotId === slot.id}
             />
           )
         })}
@@ -146,13 +177,14 @@ export default function SessionCard({
   )
 }
 
-function SlotItem({ slot, player, onRemove, onPlayerClick, onHover, isHovered }: {
+function SlotItem({ slot, player, onRemove, onPlayerClick, onHover, isHovered, isHighlighted }: {
   slot: { id: string; slotLabel: string; requiredGender: string; playerId: string | null }
   player: { id: string; nickname: string } | undefined
   onRemove: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
   onHover: (slotId: string | null) => void
   isHovered: boolean
+  isHighlighted?: boolean
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: `slot-${slot.id}`,
@@ -167,6 +199,7 @@ function SlotItem({ slot, player, onRemove, onPlayerClick, onHover, isHovered }:
       onMouseLeave={() => onHover(null)}
       className={`
         flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all
+        ${isHighlighted ? 'ring-2 ring-board-accent ring-offset-1' : ''}
         ${slot.playerId
           ? 'bg-gray-50 border border-board-border'
           : isOver || isHovered

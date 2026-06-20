@@ -11,7 +11,9 @@ interface PlayerCardProps {
 
 export default function PlayerCard({ player, onEdit, isAssigned }: PlayerCardProps) {
   const getRecentPlays = useScheduleStore((s) => s.getRecentPlays)
+  const getPlayerStats = useScheduleStore((s) => s.getPlayerStats)
   const recentPlays = getRecentPlays(player.id, 3)
+  const stats = getPlayerStats(player.id)
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `player-${player.id}`,
@@ -103,6 +105,26 @@ export default function PlayerCard({ player, onEdit, isAssigned }: PlayerCardPro
         <div className="flex items-center gap-1 mt-1.5 text-[10px] text-board-danger">
           <Clock className="w-3 h-3 shrink-0" />
           <span className="truncate">{player.lateNote}</span>
+        </div>
+      )}
+
+      {stats.totalSessions > 0 && (
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {stats.noShowCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-medium">
+              爽约{stats.noShowCount}次
+            </span>
+          )}
+          {stats.avgLateMinutes >= 10 && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[9px] font-medium">
+              均迟{stats.avgLateMinutes}分
+            </span>
+          )}
+          {stats.onTimeCount > 0 && stats.noShowCount === 0 && stats.avgLateMinutes < 10 && (
+            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[9px] font-medium">
+              准时靠谱
+            </span>
+          )}
         </div>
       )}
 

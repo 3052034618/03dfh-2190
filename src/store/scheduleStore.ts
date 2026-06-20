@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Session, SessionSlot, Player, PlayRecord, Hint, TimePreference } from '@/types'
+import type { Session, SessionSlot, Player, PlayRecord, Hint, TimePreference, SessionPlayerRecord } from '@/types'
 import {
   DEFAULT_TIME_PREFERENCE,
   timePreferenceOverlaps,
@@ -39,7 +39,7 @@ function createSeedData() {
       canStayUp: true,
       acceptCrossGender: true,
       lateNote: '',
-      timePreference: { weekdayDay: false, weekdayNight: false, weekendDay: false, weekendNight: true, lateNight: true },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekendNight: true, lateNight: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, saturday: true, sunday: true } },
       availableTimeSlots: ['周末晚间', '可熬夜场'],
     },
     {
@@ -49,7 +49,7 @@ function createSeedData() {
       canStayUp: true,
       acceptCrossGender: false,
       lateNote: '经常迟到10分钟',
-      timePreference: { weekdayDay: false, weekdayNight: true, weekendDay: true, weekendNight: true, lateNight: false },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekdayNight: true, weekendDay: true, weekendNight: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, friday: true, saturday: true } },
       availableTimeSlots: ['工作日晚间', '周末白天', '周末晚间'],
     },
     {
@@ -59,7 +59,7 @@ function createSeedData() {
       canStayUp: false,
       acceptCrossGender: true,
       lateNote: '',
-      timePreference: { weekdayDay: false, weekdayNight: false, weekendDay: true, weekendNight: false, lateNight: false },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekendDay: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, saturday: true } },
       availableTimeSlots: ['周末白天'],
     },
     {
@@ -69,7 +69,7 @@ function createSeedData() {
       canStayUp: true,
       acceptCrossGender: true,
       lateNote: '',
-      timePreference: { weekdayDay: false, weekdayNight: true, weekendDay: false, weekendNight: true, lateNight: true },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekdayNight: true, weekendNight: true, lateNight: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, friday: true, saturday: true } },
       availableTimeSlots: ['工作日晚间', '周末晚间', '可熬夜场'],
     },
     {
@@ -79,7 +79,7 @@ function createSeedData() {
       canStayUp: false,
       acceptCrossGender: true,
       lateNote: '不玩恐怖',
-      timePreference: { weekdayDay: false, weekdayNight: false, weekendDay: true, weekendNight: true, lateNight: false },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekendDay: true, weekendNight: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, saturday: true, sunday: true } },
       availableTimeSlots: ['周末白天', '周末晚间'],
     },
     {
@@ -89,7 +89,7 @@ function createSeedData() {
       canStayUp: true,
       acceptCrossGender: false,
       lateNote: '',
-      timePreference: { weekdayDay: false, weekdayNight: false, weekendDay: false, weekendNight: true, lateNight: true },
+      timePreference: { ...DEFAULT_TIME_PREFERENCE, weekendNight: true, lateNight: true, specificDays: { ...DEFAULT_TIME_PREFERENCE.specificDays!, saturday: true } },
       availableTimeSlots: ['周末晚间', '可熬夜场'],
     },
   ]
@@ -104,7 +104,8 @@ function createSeedData() {
       dmName: '阿文',
       shopName: '迷雾剧场',
       depositStatus: 'paid',
-      sessionTime: { dayType: 'weekend', timeOfDay: 'night' },
+      status: 'scheduled',
+      sessionTime: { dayType: 'weekend', timeOfDay: 'night', dayOfWeek: 6 },
       weekKey: getCurrentWeekKey(),
       createdAt: Date.now(),
     },
@@ -117,7 +118,8 @@ function createSeedData() {
       dmName: '小何',
       shopName: '入戏推理馆',
       depositStatus: 'partial',
-      sessionTime: { dayType: 'weekend', timeOfDay: 'day' },
+      status: 'scheduled',
+      sessionTime: { dayType: 'weekend', timeOfDay: 'day', dayOfWeek: 6 },
       weekKey: getCurrentWeekKey(),
       createdAt: Date.now() + 1,
     },
@@ -145,7 +147,9 @@ function createSeedData() {
     { id: 'r4', playerId: 'p4', scriptName: '第二十二条校规', scriptType: '恐怖', shopName: '诡境', playedAt: Date.now() - 7 * 24 * 60 * 60 * 1000 },
   ]
 
-  return { players, sessions, sessionSlots, playRecords }
+  const sessionPlayerRecords: SessionPlayerRecord[] = []
+
+  return { players, sessions, sessionSlots, playRecords, sessionPlayerRecords }
 }
 
 function computeSessionHints(
@@ -168,10 +172,13 @@ function computeSessionHints(
     .filter(Boolean) as Player[]
 
   let playersToCheck = assignedPlayers
+  let hoverTargetSlotId: string | undefined
   if (hoverPlayerId) {
     const hoverPlayer = state.players.find((p) => p.id === hoverPlayerId)
     if (hoverPlayer) {
       playersToCheck = [...assignedPlayers, hoverPlayer]
+      const targetSlot = slots.find((s) => s.id === excludeSlotId)
+      if (targetSlot) hoverTargetSlotId = targetSlot.id
     }
   }
 
@@ -185,15 +192,21 @@ function computeSessionHints(
     }
   }
 
-  if (playersToCheck.length >= 2 && hasAnyTimePreference(playersToCheck[0].timePreference)) {
-    const first = playersToCheck[0]
-    for (let i = 1; i < playersToCheck.length; i++) {
-      const other = playersToCheck[i]
-      if (!timePreferenceOverlaps(first.timePreference, other.timePreference)) {
+  for (let i = 0; i < playersToCheck.length; i++) {
+    const p = playersToCheck[i]
+    for (let j = i + 1; j < playersToCheck.length; j++) {
+      const other = playersToCheck[j]
+      if (!timePreferenceOverlaps(p.timePreference, other.timePreference)) {
+        const isHover = hoverPlayerId && (p.id === hoverPlayerId || other.id === hoverPlayerId)
+        const otherPlayer = p.id === hoverPlayerId ? other : p
+        const targetSlot = isHover && hoverTargetSlotId ? hoverTargetSlotId : assignedSlots.find((s) => s.playerId === otherPlayer.id)?.id
         hints.push({
           type: 'conflict',
-          message: `与本车${other.nickname}时间不重合`,
-          targetPlayerId: other.id,
+          message: isHover
+            ? `与本车${otherPlayer.nickname}时间不重合`
+            : `${p.nickname} 与 ${other.nickname} 时间不重合`,
+          targetPlayerId: otherPlayer.id,
+          targetSlotId: targetSlot,
         })
       }
     }
@@ -202,17 +215,22 @@ function computeSessionHints(
   if (session.sessionTime) {
     for (const p of playersToCheck) {
       if (!sessionTimeMatchesPreference(session.sessionTime, p.timePreference)) {
+        const targetSlot = p.id === hoverPlayerId
+          ? hoverTargetSlotId
+          : assignedSlots.find((s) => s.playerId === p.id)?.id
         if (hoverPlayerId && p.id === hoverPlayerId) {
           hints.push({
             type: 'conflict',
             message: '该玩家时间与车局时段不匹配',
             targetPlayerId: p.id,
+            targetSlotId: targetSlot,
           })
         } else if (!hoverPlayerId) {
           hints.push({
             type: 'conflict',
             message: `${p.nickname}的时间与车局时段不匹配`,
             targetPlayerId: p.id,
+            targetSlotId: targetSlot,
           })
         }
       }
@@ -222,49 +240,68 @@ function computeSessionHints(
   if (session.estimatedDuration >= 6) {
     for (const p of playersToCheck) {
       if (!p.canStayUp) {
+        const targetSlot = p.id === hoverPlayerId
+          ? hoverTargetSlotId
+          : assignedSlots.find((s) => s.playerId === p.id)?.id
         if (hoverPlayerId && p.id === hoverPlayerId) {
           hints.push({
             type: 'conflict',
             message: `本车预计${session.estimatedDuration}h，该玩家不能熬夜`,
             targetPlayerId: p.id,
+            targetSlotId: targetSlot,
           })
         } else if (!hoverPlayerId) {
           hints.push({
             type: 'conflict',
             message: `${p.nickname}不能熬夜，本车预计${session.estimatedDuration}h`,
             targetPlayerId: p.id,
+            targetSlotId: targetSlot,
           })
         }
       }
     }
   }
 
+  const allPlayersToCheck = hoverPlayerId
+    ? [...assignedPlayers, state.players.find((p) => p.id === hoverPlayerId)].filter(Boolean) as Player[]
+    : assignedPlayers
+
+  for (const p of allPlayersToCheck) {
+    const recentPlays = state.playRecords.filter(
+      (r) =>
+        r.playerId === p.id &&
+        Date.now() - r.playedAt < 14 * 24 * 60 * 60 * 1000
+    )
+    const sameShopSameType = recentPlays.find((r) => {
+      if (r.shopName !== session.shopName) return false
+      if (!r.scriptType) return false
+      return sessionTypes.includes(r.scriptType)
+    })
+    if (sameShopSameType) {
+      const targetSlot = p.id === hoverPlayerId
+        ? hoverTargetSlotId
+        : assignedSlots.find((s) => s.playerId === p.id)?.id
+      const daysAgo = Math.floor((Date.now() - sameShopSameType.playedAt) / (24 * 60 * 60 * 1000))
+      hints.push({
+        type: 'info',
+        message: hoverPlayerId && p.id === hoverPlayerId
+          ? `该玩家${daysAgo}天前刚玩过同店同类型（${sameShopSameType.shopName}·${sameShopSameType.scriptType}）`
+          : `${p.nickname} ${daysAgo}天前刚玩过同店同类型（${sameShopSameType.shopName}·${sameShopSameType.scriptType}）`,
+        targetPlayerId: p.id,
+        targetSlotId: targetSlot,
+      })
+    }
+  }
+
   if (hoverPlayerId) {
     const player = state.players.find((p) => p.id === hoverPlayerId)
     if (player) {
-      const recentPlays = state.playRecords.filter(
-        (r) =>
-          r.playerId === hoverPlayerId &&
-          Date.now() - r.playedAt < 7 * 24 * 60 * 60 * 1000
-      )
-      const sameShopSameType = recentPlays.find((r) => {
-        if (r.shopName !== session.shopName) return false
-        if (!r.scriptType) return false
-        return sessionTypes.includes(r.scriptType)
-      })
-      if (sameShopSameType) {
-        hints.push({
-          type: 'info',
-          message: `该玩家上周刚玩过同店同类型（${sameShopSameType.shopName}·${sameShopSameType.scriptType}）`,
-          targetPlayerId: hoverPlayerId,
-        })
-      }
-
       if (sessionTypes.length > 0 && !player.preferenceTypes.some((pt) => sessionTypes.includes(pt))) {
         hints.push({
           type: 'info',
           message: `该玩家偏好类型与本车（${sessionTypes.join('/')}）不太匹配`,
           targetPlayerId: hoverPlayerId,
+          targetSlotId: hoverTargetSlotId,
         })
       }
 
@@ -273,6 +310,56 @@ function computeSessionHints(
           type: 'info',
           message: `迟到备注：${player.lateNote}`,
           targetPlayerId: hoverPlayerId,
+          targetSlotId: hoverTargetSlotId,
+        })
+      }
+
+      const records = state.sessionPlayerRecords.filter((r) => r.playerId === hoverPlayerId)
+      const noShowCount = records.filter((r) => r.attendance === 'no-show').length
+      const lateRecords = records.filter((r) => r.attendance === 'late')
+      const avgLate = lateRecords.length > 0
+        ? Math.round(lateRecords.reduce((sum, r) => sum + (r.lateMinutes || 0), 0) / lateRecords.length)
+        : 0
+      if (noShowCount > 0) {
+        hints.push({
+          type: 'conflict',
+          message: `历史爽约 ${noShowCount} 次，请注意`,
+          targetPlayerId: hoverPlayerId,
+          targetSlotId: hoverTargetSlotId,
+        })
+      }
+      if (avgLate >= 15) {
+        hints.push({
+          type: 'suggestion',
+          message: `历史平均迟到 ${avgLate} 分钟`,
+          targetPlayerId: hoverPlayerId,
+          targetSlotId: hoverTargetSlotId,
+        })
+      }
+    }
+  } else {
+    for (const p of assignedPlayers) {
+      const records = state.sessionPlayerRecords.filter((r) => r.playerId === p.id)
+      const noShowCount = records.filter((r) => r.attendance === 'no-show').length
+      const lateRecords = records.filter((r) => r.attendance === 'late')
+      const avgLate = lateRecords.length > 0
+        ? Math.round(lateRecords.reduce((sum, r) => sum + (r.lateMinutes || 0), 0) / lateRecords.length)
+        : 0
+      const targetSlot = assignedSlots.find((s) => s.playerId === p.id)?.id
+      if (noShowCount > 0) {
+        hints.push({
+          type: 'info',
+          message: `${p.nickname} 历史爽约 ${noShowCount} 次`,
+          targetPlayerId: p.id,
+          targetSlotId: targetSlot,
+        })
+      }
+      if (avgLate >= 15) {
+        hints.push({
+          type: 'info',
+          message: `${p.nickname} 历史平均迟到 ${avgLate} 分钟`,
+          targetPlayerId: p.id,
+          targetSlotId: targetSlot,
         })
       }
     }
@@ -286,11 +373,13 @@ interface ScheduleStore {
   sessionSlots: SessionSlot[]
   players: Player[]
   playRecords: PlayRecord[]
+  sessionPlayerRecords: SessionPlayerRecord[]
   currentWeekKey: string
 
-  addSession: (session: Omit<Session, 'id' | 'createdAt' | 'weekKey'> & { slotCount: number; slotGenders: string[] }) => void
+  addSession: (session: Omit<Session, 'id' | 'createdAt' | 'weekKey' | 'status'> & { slotCount: number; slotGenders: string[] }) => void
   updateSession: (id: string, data: Partial<Session>) => void
   deleteSession: (id: string) => void
+  setSessionStatus: (id: string, status: Session['status']) => void
 
   addSlot: (slot: Omit<SessionSlot, 'id'>) => void
   assignPlayer: (slotId: string, playerId: string | null) => void
@@ -302,6 +391,19 @@ interface ScheduleStore {
 
   addPlayRecord: (record: Omit<PlayRecord, 'id'>) => void
   deletePlayRecord: (id: string) => void
+
+  addSessionPlayerRecord: (record: Omit<SessionPlayerRecord, 'id' | 'createdAt'>) => void
+  updateSessionPlayerRecord: (id: string, data: Partial<SessionPlayerRecord>) => void
+  deleteSessionPlayerRecord: (id: string) => void
+  getRecordsForSession: (sessionId: string) => SessionPlayerRecord[]
+  getRecordsForPlayer: (playerId: string) => SessionPlayerRecord[]
+  getPlayerStats: (playerId: string) => {
+    totalSessions: number
+    onTimeCount: number
+    lateCount: number
+    noShowCount: number
+    avgLateMinutes: number
+  }
 
   getHints: (playerId: string, sessionId: string, excludeSlotId?: string) => Hint[]
   getAllSessionHints: (sessionId: string) => Hint[]
@@ -333,6 +435,7 @@ export const useScheduleStore = create<ScheduleStore>()(
           dmName: data.dmName,
           shopName: data.shopName,
           depositStatus: data.depositStatus,
+          status: 'scheduled',
           sessionTime: data.sessionTime,
           weekKey,
           createdAt: Date.now(),
@@ -361,6 +464,17 @@ export const useScheduleStore = create<ScheduleStore>()(
         set((state) => ({
           sessions: state.sessions.filter((s) => s.id !== id),
           sessionSlots: state.sessionSlots.filter((s) => s.sessionId !== id),
+          sessionPlayerRecords: state.sessionPlayerRecords.filter((r) => r.sessionId !== id),
+        }))
+      },
+
+      setSessionStatus: (id, status) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === id
+              ? { ...s, status, completedAt: status === 'played' ? Date.now() : s.completedAt }
+              : s
+          ),
         }))
       },
 
@@ -414,7 +528,8 @@ export const useScheduleStore = create<ScheduleStore>()(
           sessionSlots: state.sessionSlots.map((s) =>
             s.playerId === id ? { ...s, playerId: null } : s
           ),
-          playRecords: state.playRecords.filter((r) => r.playerId !== id),
+          playRecords: state.playRecords.filter((r) => r.playerId === id),
+          sessionPlayerRecords: state.sessionPlayerRecords.filter((r) => r.playerId !== id),
         }))
       },
 
@@ -428,6 +543,45 @@ export const useScheduleStore = create<ScheduleStore>()(
         set((state) => ({
           playRecords: state.playRecords.filter((r) => r.id !== id),
         }))
+      },
+
+      addSessionPlayerRecord: (data) => {
+        set((state) => ({
+          sessionPlayerRecords: [...state.sessionPlayerRecords, { id: genId(), createdAt: Date.now(), ...data }],
+        }))
+      },
+
+      updateSessionPlayerRecord: (id, data) => {
+        set((state) => ({
+          sessionPlayerRecords: state.sessionPlayerRecords.map((r) =>
+            r.id === id ? { ...r, ...data } : r
+          ),
+        }))
+      },
+
+      deleteSessionPlayerRecord: (id) => {
+        set((state) => ({
+          sessionPlayerRecords: state.sessionPlayerRecords.filter((r) => r.id !== id),
+        }))
+      },
+
+      getRecordsForSession: (sessionId) =>
+        get().sessionPlayerRecords.filter((r) => r.sessionId === sessionId),
+
+      getRecordsForPlayer: (playerId) =>
+        get().sessionPlayerRecords.filter((r) => r.playerId === playerId),
+
+      getPlayerStats: (playerId) => {
+        const records = get().sessionPlayerRecords.filter((r) => r.playerId === playerId)
+        const totalSessions = records.length
+        const onTimeCount = records.filter((r) => r.attendance === 'on-time').length
+        const lateCount = records.filter((r) => r.attendance === 'late').length
+        const noShowCount = records.filter((r) => r.attendance === 'no-show').length
+        const lateRecords = records.filter((r) => r.attendance === 'late')
+        const avgLateMinutes = lateRecords.length > 0
+          ? Math.round(lateRecords.reduce((sum, r) => sum + (r.lateMinutes || 0), 0) / lateRecords.length)
+          : 0
+        return { totalSessions, onTimeCount, lateCount, noShowCount, avgLateMinutes }
       },
 
       getHints: (playerId, sessionId, excludeSlotId) => {
@@ -470,15 +624,37 @@ export const useScheduleStore = create<ScheduleStore>()(
     }),
     {
       name: 'schedule-board-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
-          const state = persistedState as ScheduleStore
+        const state = persistedState as ScheduleStore
+        if (version < 2 && state.players) {
+          state.players = state.players.map((p) => ({
+            ...p,
+            timePreference: p.timePreference || availableSlotsToTimePreference(p.availableTimeSlots || []),
+          }))
+        }
+        if (version < 3) {
+          if (state.sessions) {
+            state.sessions = state.sessions.map((s) => ({
+              ...s,
+              status: (s as any).status || 'scheduled',
+            }))
+          }
           if (state.players) {
             state.players = state.players.map((p) => ({
               ...p,
-              timePreference: p.timePreference || availableSlotsToTimePreference(p.availableTimeSlots || []),
+              timePreference: {
+                ...DEFAULT_TIME_PREFERENCE,
+                ...(p.timePreference || {}),
+                specificDays: {
+                  ...DEFAULT_TIME_PREFERENCE.specificDays!,
+                  ...((p.timePreference as any)?.specificDays || {}),
+                },
+              },
             }))
+          }
+          if (!state.sessionPlayerRecords) {
+            state.sessionPlayerRecords = []
           }
         }
         return persistedState

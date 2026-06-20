@@ -2,12 +2,24 @@ import { useState } from 'react'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Session } from '@/types'
-import { SCRIPT_TYPES } from '@/types'
+import { SCRIPT_TYPES, WEEKDAY_LABELS, DAY_OF_WEEK_TO_KEY, KEY_TO_DAY_OF_WEEK } from '@/types'
+import type { SpecificDayKey } from '@/types'
 
 interface SessionFormProps {
   session?: Session
   onClose: () => void
 }
+
+const DAY_OPTIONS: { key: SpecificDayKey | null; label: string }[] = [
+  { key: null, label: '不限' },
+  { key: 'monday', label: WEEKDAY_LABELS.monday },
+  { key: 'tuesday', label: WEEKDAY_LABELS.tuesday },
+  { key: 'wednesday', label: WEEKDAY_LABELS.wednesday },
+  { key: 'thursday', label: WEEKDAY_LABELS.thursday },
+  { key: 'friday', label: WEEKDAY_LABELS.friday },
+  { key: 'saturday', label: WEEKDAY_LABELS.saturday },
+  { key: 'sunday', label: WEEKDAY_LABELS.sunday },
+]
 
 export default function SessionForm({ session, onClose }: SessionFormProps) {
   const addSession = useScheduleStore((s) => s.addSession)
@@ -21,6 +33,11 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
   const [dmName, setDmName] = useState(session?.dmName || '')
   const [shopName, setShopName] = useState(session?.shopName || '')
   const [depositStatus, setDepositStatus] = useState<Session['depositStatus']>(session?.depositStatus || 'unpaid')
+  const [dayOfWeek, setDayOfWeek] = useState<SpecificDayKey | null>(
+    session?.sessionTime?.dayOfWeek !== undefined
+      ? DAY_OF_WEEK_TO_KEY[session.sessionTime.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6]
+      : null
+  )
   const [dayType, setDayType] = useState<'weekday' | 'weekend' | 'any'>(session?.sessionTime?.dayType || 'any')
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'night' | 'late' | 'any'>(session?.sessionTime?.timeOfDay || 'any')
   const [slotCount, setSlotCount] = useState(6)
@@ -40,6 +57,12 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
     e.preventDefault()
     if (!scriptName.trim()) return
 
+    const sessionTime = {
+      ...(dayOfWeek !== null ? { dayOfWeek: KEY_TO_DAY_OF_WEEK[dayOfWeek] } : {}),
+      dayType,
+      timeOfDay,
+    }
+
     if (isEdit) {
       updateSession(session.id, {
         scriptName,
@@ -49,7 +72,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
         dmName,
         shopName,
         depositStatus,
-        sessionTime: { dayType, timeOfDay },
+        sessionTime,
       })
     } else {
       addSession({
@@ -60,7 +83,7 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
         dmName,
         shopName,
         depositStatus,
-        sessionTime: { dayType, timeOfDay },
+        sessionTime,
         slotCount,
         slotGenders: slotGenders.slice(0, slotCount),
       })
@@ -169,6 +192,26 @@ export default function SessionForm({ session, onClose }: SessionFormProps) {
                 placeholder="店铺名称"
                 className="w-full px-3 py-2 rounded-lg border border-board-border text-sm text-board-text placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-board-accent/30 focus:border-board-accent transition-colors"
               />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-board-muted mb-1">具体星期几</label>
+            <div className="flex flex-wrap gap-1">
+              {DAY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key ?? 'any'}
+                  type="button"
+                  onClick={() => setDayOfWeek(opt.key)}
+                  className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                    dayOfWeek === opt.key
+                      ? 'bg-board-accent text-white'
+                      : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { X, Trash2, Plus } from 'lucide-react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import type { Player, PlayRecord, TimePreference } from '@/types'
-import { SCRIPT_TYPES, DEFAULT_TIME_PREFERENCE, TIME_PREFERENCE_LABELS } from '@/types'
+import { SCRIPT_TYPES, DEFAULT_TIME_PREFERENCE, TIME_PREFERENCE_LABELS, WEEKDAY_LABELS } from '@/types'
 
 interface PlayerFormProps {
   player?: Player
@@ -221,6 +221,34 @@ export default function PlayerForm({ player, onClose }: PlayerFormProps) {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-3">
+              <div className="text-[10px] font-medium text-board-muted uppercase tracking-wide mb-1">
+                具体星期几 (可选)
+              </div>
+              <div className="flex gap-1">
+                {(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      const sd = timePreference.specificDays || { ...DEFAULT_TIME_PREFERENCE.specificDays! }
+                      setTimePreference({
+                        ...timePreference,
+                        specificDays: { ...sd, [key]: !sd[key] },
+                      })
+                    }}
+                    className={`flex-1 py-1.5 rounded text-[10px] font-medium transition-colors ${
+                      timePreference.specificDays?.[key]
+                        ? 'bg-board-accent text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {WEEKDAY_LABELS[key]}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="mt-1.5 text-[10px] text-gray-400">
               未选任何时段时视为未填写，不参与时间冲突判断

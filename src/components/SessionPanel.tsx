@@ -13,6 +13,7 @@ export interface SessionFilter {
 interface SessionPanelProps {
   onNewSession: () => void
   onEditSession: (session: Session) => void
+  onDebriefSession: (session: Session) => void
   sessionHints: Record<string, Hint[]>
   onRemovePlayer: (slotId: string) => void
   onPlayerClick: (playerId: string) => void
@@ -21,11 +22,13 @@ interface SessionPanelProps {
   filter: SessionFilter
   onFilterChange: (filter: SessionFilter) => void
   highlightSessionId?: string | null
+  highlightSlotId?: string | null
 }
 
 export default function SessionPanel({
   onNewSession,
   onEditSession,
+  onDebriefSession,
   sessionHints,
   onRemovePlayer,
   onPlayerClick,
@@ -34,6 +37,7 @@ export default function SessionPanel({
   filter,
   onFilterChange,
   highlightSessionId,
+  highlightSlotId,
 }: SessionPanelProps) {
   const sessions = useScheduleStore((s) => s.sessions)
   const getShops = useScheduleStore((s) => s.getShops)
@@ -159,11 +163,13 @@ export default function SessionPanel({
             <SessionCard
               session={session}
               onEdit={() => onEditSession(session)}
+              onDebrief={() => onDebriefSession(session)}
               hints={sessionHints[session.id] || []}
               onRemovePlayer={onRemovePlayer}
               onPlayerClick={onPlayerClick}
               onSlotHover={onSlotHover}
               hoveredSlotId={hoveredSessionId === session.id ? hoveredSlotId : null}
+              highlightSlotId={highlightSlotId}
               isHighlighted={highlightSessionId === session.id}
             />
           </div>

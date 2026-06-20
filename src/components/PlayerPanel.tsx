@@ -2,8 +2,8 @@ import { Search, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScheduleStore } from '@/store/scheduleStore'
 import PlayerCard from './PlayerCard'
-import type { Player, TimePreference } from '@/types'
-import { SCRIPT_TYPES, TIME_PREFERENCE_LABELS, hasAnyTimePreference } from '@/types'
+import type { Player, TimePreference, SpecificDayKey } from '@/types'
+import { SCRIPT_TYPES, TIME_PREFERENCE_LABELS, hasAnyTimePreference, hasSpecificDayPreference, WEEKDAY_LABELS } from '@/types'
 
 interface PlayerPanelProps {
   onAddPlayer: () => void
@@ -16,6 +16,7 @@ interface TimeFilter {
   weekendDay: boolean
   weekendNight: boolean
   lateNight: boolean
+  specificDays: Record<SpecificDayKey, boolean>
 }
 
 interface FilterState {
@@ -26,34 +27,75 @@ interface FilterState {
   acceptCross: 'any' | 'yes' | 'no'
 }
 
+const DEFAULT_SPECIFIC_DAYS: Record<SpecificDayKey, boolean> = {
+  monday: false,
+  tuesday: false,
+  wednesday: false,
+  thursday: false,
+  friday: false,
+  saturday: false,
+  sunday: false,
+}
+
 const DEFAULT_TIME_FILTER: TimeFilter = {
   weekdayDay: false,
   weekdayNight: false,
   weekendDay: false,
   weekendNight: false,
   lateNight: false,
+  specificDays: { ...DEFAULT_SPECIFIC_DAYS },
 }
 
 const DEFAULT_FILTER: FilterState = {
   search: '',
   types: [],
-  time: { ...DEFAULT_TIME_FILTER },
+  time: { ...DEFAULT_TIME_FILTER, specificDays: { ...DEFAULT_SPECIFIC_DAYS } },
   canStayUp: 'any',
   acceptCross: 'any',
 }
 
+const SPECIFIC_DAY_KEYS: SpecificDayKey[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
 function hasTimeFilter(tf: TimeFilter): boolean {
-  return tf.weekdayDay || tf.weekdayNight || tf.weekendDay || tf.weekendNight || tf.lateNight
+  return (
+    tf.weekdayDay ||
+    tf.weekdayNight ||
+    tf.weekendDay ||
+    tf.weekendNight ||
+    tf.lateNight ||
+    SPECIFIC_DAY_KEYS.some((k) => tf.specificDays[k])
+  )
 }
 
 function matchesTimeFilter(pref: TimePreference, filter: TimeFilter): boolean {
   if (!hasTimeFilter(filter)) return true
   if (!hasAnyTimePreference(pref)) return true
-  if (filter.weekdayDay && pref.weekdayDay) return true
-  if (filter.weekdayNight && pref.weekdayNight) return true
-  if (filter.weekendDay && pref.weekendDay) return true
-  if (filter.weekendNight && pref.weekendNight) return true
-  if (filter.lateNight && pref.lateNight) return true
+
+  const hasSpecificFilter = SPECIFIC_DAY_KEYS.some((k) => filter.specificDays[k])
+
+  if (hasSpecificFilter) {
+    if (hasSpecificDayPreference(pref)) {
+      const matched = SPECIFIC_DAY_KEYS.some(
+        (k) => filter.specificDays[k] && pref.specificDays?.[k]
+      )
+      if (matched) return true
+    }
+    const matchedGeneral =
+      (filter.weekdayDay && pref.weekdayDay) ||
+      (filter.weekdayNight && pref.weekdayNight) ||
+      (filter.weekendDay && pref.weekendDay) ||
+      (filter.weekendNight && pref.weekendNight) ||
+      (filter.lateNight && pref.lateNight)
+    if (matchedGeneral) return true
+    if (hasSpecificDayPreference(pref)) return false
+  } else {
+    if (filter.weekdayDay && pref.weekdayDay) return true
+    if (filter.weekdayNight && pref.weekdayNight) return true
+    if (filter.weekendDay && pref.weekendDay) return true
+    if (filter.weekendNight && pref.weekendNight) return true
+    if (filter.lateNight && pref.lateNight) return true
+  }
+
   return false
 }
 
@@ -64,6 +106,7 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
 
   const activeTypeCount = filter.types.length
   const hasTime = hasTimeFilter(filter.time)
+  const hasSpecificDays = SPECIFIC_DAY_KEYS.some((k) => filter.time.specificDays[k])
 
   const isAnyActive =
     activeTypeCount > 0 ||
@@ -81,6 +124,19 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
 
   const toggleTime = (key: keyof TimeFilter) => {
     setFilter((f) => ({ ...f, time: { ...f.time, [key]: !f.time[key] } }))
+  }
+
+  const toggleSpecificDay = (key: SpecificDayKey) => {
+    setFilter((f) => ({
+      ...f,
+      time: {
+        ...f.time,
+        specificDays: {
+          ...f.time.specificDays,
+          [key]: !f.time.specificDays[key],
+        },
+      },
+    }))
   }
 
   const filtered = players.filter((p) => {
@@ -102,7 +158,7 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
   const available = filtered.filter((p) => !assignedIds.has(p.id))
   const assigned = filtered.filter((p) => assignedIds.has(p.id))
 
-  const timeKeys: (keyof TimePreference)[] = ['weekdayDay', 'weekdayNight', 'weekendDay', 'weekendNight', 'lateNight']
+  const timeKeys = ['weekdayDay', 'weekdayNight', 'weekendDay', 'weekendNight', 'lateNight'] as const
 
   return (
     <div className="flex flex-col h-full">
@@ -171,6 +227,26 @@ export default function PlayerPanel({ onAddPlayer, onEditPlayer }: PlayerPanelPr
                 <span className="text-[10px] text-board-info">已筛选</span>
               )}
             </div>
+
+            <div className="mb-1.5">
+              <div className="text-[9px] text-board-muted mb-1">具体星期几</div>
+              <div className="flex gap-1">
+                {SPECIFIC_DAY_KEYS.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => toggleSpecificDay(k)}
+                    className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
+                      filter.time.specificDays[k]
+                        ? 'bg-board-accent text-white'
+                        : 'bg-gray-100 text-board-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {WEEKDAY_LABELS[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-1">
               {timeKeys.map((k) => (
                 <button
